@@ -1,0 +1,9 @@
+name = "webmcp-conformance"
+defaultTargets = ["oracle"]
+
+[[lean_lib]]
+name = "WebMCP"
+
+[[lean_exe]]
+name = "oracle"
+root = "Main"
