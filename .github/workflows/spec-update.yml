@@ -190,15 +190,20 @@ jobs:
           git config user.email "$(git log -1 --format=%ae origin/main)"
           git switch -c "$BRANCH"
           git add -A
+          # Model-written text can quote spec issue and PR numbers or names. Neutralise those so
+          # nothing here pings anyone or adds backlinks to the spec repo; the commit message is
+          # fixed text for the same reason.
+          node .github/spec-update/sanitize.cjs --title "$OUT_DIR/pr-title.txt"
+          node .github/spec-update/sanitize.cjs "$OUT_DIR/pr-body.md"
           title=$(head -n1 "$OUT_DIR/pr-title.txt")
-          git commit -q -m "$title" -m "Spec ${{ steps.spec.outputs.base }}..${{ steps.spec.outputs.target }} ($SPEC_REPO $SPEC_REF)"
+          git commit -q -m "Move the model to spec ${{ steps.spec.outputs.target }}" -m "Spec ${{ steps.spec.outputs.base }}..${{ steps.spec.outputs.target }} ($SPEC_REPO $SPEC_REF)"
           git push -q "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$BRANCH"
           draft=${{ steps.pr.outputs.draft }}
           [ "${{ steps.gate.outputs.ok }}" = true ] || draft=true
           {
             cat "$OUT_DIR/pr-body.md"
             echo
-            echo "Spec diff: https://github.com/$SPEC_REPO/compare/${{ steps.spec.outputs.base }}...${{ steps.spec.outputs.target }}"
+            echo "Spec range: \`${{ steps.spec.outputs.base }}...${{ steps.spec.outputs.target }}\` in \`$SPEC_REPO\` ($SPEC_REF)"
             echo
             echo '```'
             cat "$RUNNER_TEMP/gate.txt"
