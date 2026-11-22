@@ -71,4 +71,6 @@ Write two files in `$OUT_DIR`:
   - what you changed in the model, citing the spec algorithm and step for each change
   - anything a reviewer must decide: ambiguous prose, a proof that no longer holds, or scope
     you left out on purpose
-  Don't @-mention anyone. Don't describe build or check results; the workflow appends those.
+  Don't @-mention anyone, and don't write issue or PR references or links: say "spec PR 376",
+  never "#376", "webmachinelearning/webmcp#376" or a github.com URL, so the spec repo gets no
+  backlinks from this repository. Don't describe build or check results; the workflow appends those.
