@@ -13,7 +13,9 @@
 }
 ```
 
-`ops` uses the same operations the oracle reads (`WebMCP/Oracle.lean`), and `want[i]` is the outcome of `ops[i]` in the form the harness compares: `ok`, `err:<exception name>`, `result:<string>`, or `tools:` followed by each `Tool` as `name|title|description|inputSchema|outputSchema|annotations`, joined by `;`.
+`ops` uses the same operations the oracle reads (`WebMCP/Oracle.lean`), and `want[i]` is the outcome of `ops[i]` in the form the harness compares: `ok`, `err:<exception name>`, `result:<string>`, or `tools:` followed by each `Tool` as `name|title|description|inputSchema|outputSchema|annotations`, joined by `;`. A `Tool` whose `source` is another document than the caller ends in `@<document>`.
+
+Operations may name the document they run in with `doc` (an index into the frame tree, `harnessDocs` in `WebMCP/Model.lean`; 0, the top-level document, when absent). `register` and `registerAbortSync` may carry `exposedTo` and `getTools` may carry `fromOrigins`, as lists of `origin:<n>` (origin `n`'s serialization), `path:<n>` (a URL of origin `n` with a path), `invalid` (not a URL) or `insecure` (`http://example.com`); absent means an empty list. Signal `n` belongs to document `n / 3`, and `execute`'s `doc` is the document that calls `executeTool()`, which may differ from the one whose `getTools()` returned the `Tool` (they are then same origin). Older corpora, without these members, parse and run the same way.
 
 Recording is deterministic: the same model, generator and seed give a byte-identical file. To regenerate after a model change:
 

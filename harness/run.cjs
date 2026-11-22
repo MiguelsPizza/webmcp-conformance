@@ -15,6 +15,7 @@
 const { chromium } = require("playwright");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
+const http = require("node:http");
 const path = require("node:path");
 const readline = require("node:readline");
 
@@ -77,24 +78,48 @@ function genTool(r) {
   };
 }
 
+// The frame tree the harness serves, in tree order; it must match `harnessDocs` in
+// WebMCP/Model.lean. Origins 0-2 are served locally (ORIGINS below); origin 3 has no document.
+const DOCS = [
+  { origin: 0, parent: null, allow: false },
+  { origin: 0, parent: 0, allow: false },
+  { origin: 2, parent: 1, allow: true },
+  { origin: 1, parent: 0, allow: true },
+  { origin: 1, parent: 0, allow: false },
+];
+// Registration signals belong to the document that uses them: signal n lives in document n/3.
+const SIGNALS_PER_DOC = 3;
+const sameOrigin = (d) => DOCS.flatMap((x, i) => (x.origin === DOCS[d].origin ? [i] : []));
+// Most operations run in the top-level document, so single-document behaviour stays well covered.
+const genDoc = (r) => choose(r, [[10, 0], [3, 1], [2, 2], [3, 3], [1, 4]]);
+const genOrigins = (r) => {
+  if (r() < 0.6) return [];
+  const n = 1 + Math.floor(r() * 2);
+  return Array.from({ length: n }, () => choose(r, [[3, `origin:${Math.floor(r() * 4)}`],
+    [1, `path:${Math.floor(r() * 3)}`], [0.3, "invalid"], [0.3, "insecure"]]));
+};
+
 function genTrace(r) {
   const ops = [];
   const len = 3 + Math.floor(r() * 12);
   for (let i = 0; i < len; i++) {
     const k = r();
+    const doc = genDoc(r);
+    const signal = () => SIGNALS_PER_DOC * doc + Math.floor(r() * SIGNALS_PER_DOC);
     if (k < 0.35) {
-      ops.push({ op: "register", ...genTool(r), signal: r() < 0.5 ? Math.floor(r() * 3) : null });
+      ops.push({ op: "register", ...genTool(r), signal: r() < 0.5 ? signal() : null,
+        exposedTo: genOrigins(r), doc });
     } else if (k < 0.4) {
-      ops.push({ op: "registerAbortSync", ...genTool(r), signal: Math.floor(r() * 3) });
+      ops.push({ op: "registerAbortSync", ...genTool(r), signal: signal(), exposedTo: genOrigins(r), doc });
     } else if (k < 0.5) {
-      ops.push({ op: "abort", signal: Math.floor(r() * 3) });
+      ops.push({ op: "abort", signal: signal() });
     } else if (k < 0.67) {
-      ops.push({ op: "getTools" });
+      ops.push({ op: "getTools", fromOrigins: genOrigins(r), doc });
     } else {
       const n = Math.floor(r() * 10);
       const input = choose(r, [[8, `obj:${n}`], [1, "omitted"], [1, `fn:${n}`],
         [0.6, "toJSONNumber"], [0.6, "cyclic"]]);
-      ops.push({ op: "execute", pending: true, input, rc: r(), ri: r() });
+      ops.push({ op: "execute", pending: true, input, rc: r(), ri: r(), rd: r() });
     }
   }
   return ops;
@@ -103,16 +128,24 @@ function genTrace(r) {
 // Execute ops need a Tool that some earlier getTools() returned. The oracle's answers to the
 // getTools() calls say how many there were, so resolve them in a second pass.
 const toolCount = (o) => (o === "tools:" ? 0 : o.slice(6).split(";").length);
+// The executing document is the one that made the getTools() call or one same-origin with it,
+// which can reach the Tool through the other document's window.
 function resolveExecutes(ops, outcomes) {
   const sizes = [];
+  const holders = [];
   const out = [];
   ops.forEach((op, i) => {
-    if (op.op === "getTools") sizes.push(outcomes[i] ? toolCount(outcomes[i]) : 0);
+    if (op.op === "getTools") {
+      sizes.push(outcomes[i] && outcomes[i].startsWith("tools:") ? toolCount(outcomes[i]) : 0);
+      holders.push(op.doc ?? 0);
+    }
     if (op.op === "execute" && op.pending) {
       const avail = sizes.map((n, c) => [n, c]).filter(([n]) => n > 0);
       if (!avail.length) return;
       const [n, c] = avail[Math.floor(op.rc * avail.length)];
-      out.push({ op: "execute", call: c, index: Math.floor(op.ri * n), input: op.input });
+      const callers = sameOrigin(holders[c]);
+      const doc = op.rd < 0.7 ? holders[c] : callers[Math.floor(((op.rd - 0.7) / 0.3) * callers.length)];
+      out.push({ op: "execute", call: c, index: Math.floor(op.ri * n), input: op.input, doc });
       return;
     }
     out.push(op);
@@ -155,110 +188,198 @@ async function generate(count, seed) {
 }
 
 // --- the implementation, in the page ---------------------------------------------------
-async function runInPage(page, ops) {
-  await page.goto("https://webmcp.test/");
-  return page.evaluate(async (ops) => {
-    const mc = document.modelContext;
-    const controllers = new Map();
-    const controller = (n) => {
-      if (!controllers.has(n)) controllers.set(n, new AbortController());
-      return controllers.get(n);
-    };
-    const cyclic = () => { const o = {}; o.self = o; return o; };
-    const schemas = {
-      object: () => ({ type: "object" }),
-      viaToJSON: () => ({ toJSON() { return { type: "string" }; } }),
-      unserializable: cyclic,
-      nonObject: () => "x",
-    };
-    const behaviors = {
-      echo: async (input) => input,
-      keys: async (input) => Object.keys(input),
-      reject: async () => { throw new Error("no"); },
-      throwSync: () => { throw new Error("no"); },
-      returnUndefined: async () => undefined,
-      returnText: async () => "hi",
-      returnEmpty: async () => "",
-      returnNull: async () => null,
-      returnNumber: async () => 5,
-      returnCyclic: async () => cyclic(),
-    };
-    const inputs = (s) => {
-      const [k, n] = s.split(":");
-      if (k === "obj") return [{ n: Number(n) }];
-      if (k === "fn") return [{ n: Number(n), f() {} }];
-      if (k === "omitted") return [];
-      if (k === "toJSONNumber") return [{ toJSON() { return 5; } }];
-      return [cyclic()];
-    };
-    const tool = (op) => {
-      const t = { name: op.name, execute: behaviors[op.behavior] };
-      if (op.title !== null) t.title = op.title;
-      if (op.description !== null) t.description = op.description;
-      if (op.inputSchema !== "absent") t.inputSchema = schemas[op.inputSchema]();
-      if (op.outputSchema !== "absent") t.outputSchema = schemas[op.outputSchema]();
-      if (op.annotations !== null) t.annotations = { ...op.annotations };
-      return t;
-    };
-    // Only real TypeErrors and DOMExceptions count; anything else is reported as such.
-    const errName = (e) =>
-      e instanceof DOMException || e instanceof TypeError ? `err:${e.name}` : `err:non-standard:${e?.name}`;
-    const json = (v) => (v === undefined ? "undefined" : JSON.stringify(v));
-    const annotations = (a) =>
-      a == null ? String(a) : JSON.stringify({ readOnlyHint: a.readOnlyHint,
-        untrustedContentHint: a.untrustedContentHint, consequentialHint: a.consequentialHint,
-        debugging: a.debugging });
-    const view = (t) => [t.name, String(t.title), t.description, json(t.inputSchema),
-      json(t.outputSchema), annotations(t.annotations)].join("|");
-    // A promise-returning method must return a promise, never throw; settle it with a timeout.
-    const settle = async (call, onValue) => {
-      let p;
-      try { p = call(); } catch (e) { return `threw:${errName(e)}`; }
-      if (!(p instanceof Promise)) return "not-a-promise";
-      let timer;
-      const timeout = new Promise((_, rej) => { timer = setTimeout(() => rej("timeout"), 5000); });
-      try {
-        return onValue(await Promise.race([p, timeout]));
-      } catch (e) {
-        return e === "timeout" ? "timeout" : errName(e);
-      } finally {
-        clearTimeout(timer);
-      }
-    };
-    const done = (v) => (v === undefined ? "ok" : `fulfilled:${String(v)}`);
-    const handles = [];
+// Each document of the frame tree is served on its origin with `pageRunner` installed, and each
+// operation runs in the document it names. Origin URLs are filled in by `serveFrames()`.
+const ORIGINS = [];
+let topUrl = null;
+
+// Installed in every document as `window.__webmcpRun(op)`, which runs one operation there and
+// returns its outcome string. State (signals, Tool objects) lives on the document's window.
+function pageRunner(origins, docOrigins) {
+  const mc = document.modelContext;
+  const controllers = new Map();
+  const controller = (n) => {
+    if (!controllers.has(n)) controllers.set(n, new AbortController());
+    return controllers.get(n);
+  };
+  // getTools() results by the index of the call in the trace, whichever document made it.
+  const handles = (window.__webmcpHandles = new Map());
+  const cyclic = () => { const o = {}; o.self = o; return o; };
+  const schemas = {
+    object: () => ({ type: "object" }),
+    viaToJSON: () => ({ toJSON() { return { type: "string" }; } }),
+    unserializable: cyclic,
+    nonObject: () => "x",
+  };
+  const behaviors = {
+    echo: async (input) => input,
+    keys: async (input) => Object.keys(input),
+    reject: async () => { throw new Error("no"); },
+    throwSync: () => { throw new Error("no"); },
+    returnUndefined: async () => undefined,
+    returnText: async () => "hi",
+    returnEmpty: async () => "",
+    returnNull: async () => null,
+    returnNumber: async () => 5,
+    returnCyclic: async () => cyclic(),
+  };
+  const inputs = (s) => {
+    const [k, n] = s.split(":");
+    if (k === "obj") return [{ n: Number(n) }];
+    if (k === "fn") return [{ n: Number(n), f() {} }];
+    if (k === "omitted") return [];
+    if (k === "toJSONNumber") return [{ toJSON() { return 5; } }];
+    return [cyclic()];
+  };
+  const originArg = (a) => {
+    const [k, n] = a.split(":");
+    if (k === "origin") return origins[Number(n)];
+    if (k === "path") return `${origins[Number(n)]}/some/path?q=1`;
+    if (k === "invalid") return "not a url";
+    return "http://example.com";
+  };
+  const tool = (op) => {
+    const t = { name: op.name, execute: behaviors[op.behavior] };
+    if (op.title !== null) t.title = op.title;
+    if (op.description !== null) t.description = op.description;
+    if (op.inputSchema !== "absent") t.inputSchema = schemas[op.inputSchema]();
+    if (op.outputSchema !== "absent") t.outputSchema = schemas[op.outputSchema]();
+    if (op.annotations !== null) t.annotations = { ...op.annotations };
+    return t;
+  };
+  const registerOptions = (op, signal) => {
+    const options = signal == null ? {} : { signal };
+    if (op.exposedTo !== undefined) options.exposedTo = op.exposedTo.map(originArg);
+    return options;
+  };
+  // Every window of the frame tree, in tree order, so a Tool's `source` can be named by index.
+  const windows = () => {
     const out = [];
-    for (const op of ops) {
-      if (op.op === "register") {
-        const options = op.signal == null ? {} : { signal: controller(op.signal).signal };
-        out.push(await settle(() => mc.registerTool(tool(op), options), done));
-      } else if (op.op === "registerAbortSync") {
-        const ac = controller(op.signal);
-        // Abort right after the call returns, before anything awaits its promise.
-        const call = () => {
-          try {
-            return mc.registerTool(tool(op), { signal: ac.signal });
-          } finally {
-            ac.abort();
-          }
-        };
-        out.push(await settle(call, done));
-      } else if (op.op === "abort") {
-        controller(op.signal).abort();
-        out.push("ok");
-      } else if (op.op === "getTools") {
-        out.push(await settle(() => mc.getTools(), (tools) => {
-          handles.push(tools);
-          return "tools:" + tools.map(view).join(";");
-        }));
-      } else {
-        const t = handles[op.call][op.index];
-        out.push(await settle(() => mc.executeTool(t, ...inputs(op.input)),
-          (r) => (typeof r === "string" ? `result:${r}` : `result-non-string:${String(r)}`)));
-      }
-    }
+    const walk = (w) => { out.push(w); for (let i = 0; i < w.length; i++) walk(w.frames[i]); };
+    walk(window.top);
     return out;
-  }, ops);
+  };
+  // Only real TypeErrors and DOMExceptions count; anything else is reported as such.
+  const errName = (e) =>
+    e instanceof DOMException || e instanceof TypeError ? `err:${e.name}` : `err:non-standard:${e?.name}`;
+  const json = (v) => (v === undefined ? "undefined" : JSON.stringify(v));
+  const annotations = (a) =>
+    a == null ? String(a) : JSON.stringify({ readOnlyHint: a.readOnlyHint,
+      untrustedContentHint: a.untrustedContentHint, consequentialHint: a.consequentialHint,
+      debugging: a.debugging });
+  // `@<document>` when the Tool's source is another window. Operations that name a document
+  // also check `origin` against that document's; older ones (no `doc`) don't, and a missing
+  // `source` there counts as the caller's own.
+  const view = (t, checkOrigin) => {
+    const all = windows();
+    const legacy = !checkOrigin && t.source === undefined;
+    const src = legacy || t.source === window ? all.indexOf(window) : all.indexOf(t.source);
+    let suffix = src === all.indexOf(window) ? "" : `@${src < 0 ? String(t.source) : src}`;
+    if (checkOrigin && t.origin !== (src < 0 ? undefined : origins[docOrigins[src]])) {
+      suffix += `!origin=${String(t.origin)}`;
+    }
+    return [t.name, String(t.title), t.description, json(t.inputSchema), json(t.outputSchema),
+      annotations(t.annotations)].join("|") + suffix;
+  };
+  // A promise-returning method must return a promise, never throw; settle it with a timeout.
+  const settle = async (call, onValue) => {
+    let p;
+    try { p = call(); } catch (e) { return `threw:${errName(e)}`; }
+    if (!(p instanceof Promise)) return "not-a-promise";
+    let timer;
+    const timeout = new Promise((_, rej) => { timer = setTimeout(() => rej("timeout"), 5000); });
+    try {
+      return onValue(await Promise.race([p, timeout]));
+    } catch (e) {
+      return e === "timeout" ? "timeout" : errName(e);
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  const done = (v) => (v === undefined ? "ok" : `fulfilled:${String(v)}`);
+  window.__webmcpRun = async (op) => {
+    if (op.op === "register") {
+      const signal = op.signal == null ? null : controller(op.signal).signal;
+      return settle(() => mc.registerTool(tool(op), registerOptions(op, signal)), done);
+    } else if (op.op === "registerAbortSync") {
+      const ac = controller(op.signal);
+      // Abort right after the call returns, before anything awaits its promise.
+      const call = () => {
+        try {
+          return mc.registerTool(tool(op), registerOptions(op, ac.signal));
+        } finally {
+          ac.abort();
+        }
+      };
+      return settle(call, done);
+    } else if (op.op === "abort") {
+      controller(op.signal).abort();
+      return "ok";
+    } else if (op.op === "getTools") {
+      const options = op.fromOrigins === undefined ? [] : [{ fromOrigins: op.fromOrigins.map(originArg) }];
+      return settle(() => mc.getTools(...options), (tools) => {
+        handles.set(op.slot, tools);
+        return "tools:" + tools.map((t) => view(t, op.doc !== undefined)).join(";");
+      });
+    } else {
+      // The Tool, from whichever same-origin document's getTools() call returned it.
+      // (If the implementation's getTools() rejected or returned fewer tools than the spec's,
+      // this passes undefined and the call fails with a TypeError.)
+      const t = (windows()[op.holder].__webmcpHandles.get(op.call) || [])[op.index];
+      return settle(() => mc.executeTool(t, ...inputs(op.input)),
+        (r) => (typeof r === "string" ? `result:${r}` : `result-non-string:${String(r)}`));
+    }
+  };
+}
+
+// Serve every document of the frame tree, each on its own origin, with the polyfill (if any)
+// and `pageRunner`. Origins 0 and 1 share a port and differ by host; origin 2 has another port.
+async function serveFrames() {
+  const page = (doc) => {
+    const frames = DOCS.flatMap((d, i) => (d.parent === doc ? [i] : []))
+      .map((i) => `<iframe src="${ORIGINS[DOCS[i].origin]}/doc/${i}"${DOCS[i].allow ? ' allow="tools"' : ""}></iframe>`);
+    return `<!doctype html>${polyfill ? `<script>${polyfill}</script>` : ""}` +
+      `<script>(${pageRunner})(${JSON.stringify([...ORIGINS, "https://other.example"])}, ` +
+      `${JSON.stringify(DOCS.map((d) => d.origin))})</script>${frames.join("")}`;
+  };
+  const server = () => new Promise((res) => {
+    const s = http.createServer((req, rsp) => {
+      const m = /^\/doc\/(\d+)$/.exec(req.url);
+      rsp.writeHead(m ? 200 : 404, { "content-type": "text/html" });
+      rsp.end(m ? page(Number(m[1])) : "");
+    });
+    s.listen(0, "127.0.0.1", () => res(s));
+  });
+  const [a, b] = [await server(), await server()];
+  ORIGINS.push(`http://127.0.0.1:${a.address().port}`, `http://localhost:${a.address().port}`,
+    `http://127.0.0.1:${b.address().port}`);
+  topUrl = `${ORIGINS[0]}/doc/0`;
+  return [a, b];
+}
+
+// The Playwright frame of each document, by its URL.
+function docFrames(page) {
+  const byUrl = new Map(page.frames().map((f) => [f.url(), f]));
+  return DOCS.map((d, i) => byUrl.get(`${ORIGINS[d.origin]}/doc/${i}`));
+}
+
+async function runInPage(page, ops) {
+  await page.goto(topUrl);
+  const frames = docFrames(page);
+  const holders = [];
+  const out = [];
+  for (const op of ops) {
+    const doc = op.op === "abort" ? Math.floor(op.signal / SIGNALS_PER_DOC) : (op.doc ?? 0);
+    let arg = op;
+    if (op.op === "getTools") {
+      arg = { ...op, slot: holders.length };
+      holders.push(doc);
+    } else if (op.op === "execute") {
+      arg = { ...op, holder: holders[op.call] };
+    }
+    out.push(await frames[doc].evaluate((a) => window.__webmcpRun(a), arg));
+  }
+  return out;
 }
 
 // --- comparison ------------------------------------------------------------------------
@@ -339,9 +460,8 @@ function coverage(traces) {
   }
   const browser = await chromium.launch(launchOptions);
   console.log(`target ${target}, browser ${browser.version()}`);
+  const servers = await serveFrames();
   const page = await browser.newPage();
-  await page.route("https://webmcp.test/", (route) =>
-    route.fulfill({ contentType: "text/html", body: `<!doctype html>${polyfill ? `<script>${polyfill}</script>` : ""}` }));
   const corpus = replayPath ? JSON.parse(fs.readFileSync(replayPath, "utf8")) : null;
   if (corpus && corpus.spec !== specSha) console.log(`warning: corpus is for spec ${corpus.spec}, model is at ${specSha}`);
   const traces = corpus ? corpus.traces : await generate(Number(countArg), Number(seedArg));
@@ -370,6 +490,7 @@ function coverage(traces) {
   if (!failures.size) console.log("implementation agrees with the model on every operation");
   for (const [key, f] of failures) printMismatch(key, f, replayPath ? "shortest failing trace" : "minimal trace");
   await browser.close();
+  servers.forEach((s) => s.close());
   oracle?.stdin.end();
   process.exitCode = failures.size ? 1 : 0;
 })();

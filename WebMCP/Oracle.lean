@@ -47,6 +47,34 @@ def parseInput (s : String) : Except String Input :=
   | ["cyclic"] => pure .unserializable
   | _ => throw s!"bad input {s}"
 
+/-- A member that may be absent, read with `f` when present. -/
+def optional {α : Type} (j : Json) (k : String) (dflt : α) (f : Json → Except String α) :
+    Except String α :=
+  match j.getObjVal? k with
+  | .ok v => f v
+  | .error _ => pure dflt
+
+/-- Parse an origin argument's wire value: `origin:<n>`, `path:<n>`, `invalid` or `insecure`. -/
+def parseOriginArg (s : String) : Except String OriginArg :=
+  match s.splitOn ":" with
+  | ["origin", n] => (OriginArg.origin ·) <$> (n.toNat?.elim (throw s!"bad origin {s}") pure)
+  | ["path", n] => (OriginArg.withPath ·) <$> (n.toNat?.elim (throw s!"bad origin {s}") pure)
+  | ["invalid"] => pure .invalid
+  | ["insecure"] => pure .insecure
+  | _ => throw s!"bad origin {s}"
+
+/-- Parse an optional list of origin arguments (`exposedTo`, `fromOrigins`); absent is empty,
+    which the spec treats the same way. -/
+def parseOriginArgs (j : Json) (k : String) : Except String (List OriginArg) :=
+  optional j k [] fun v => do
+    (← v.getArr?).toList.mapM fun e => do parseOriginArg (← e.getStr?)
+
+/-- Parse the optional `doc` member: the document an operation runs in, 0 when absent. -/
+def parseDoc (j : Json) : Except String Nat :=
+  optional j "doc" 0 fun v => do
+    let d ← v.getNat?
+    if d < harnessDocs.length then pure d else throw s!"bad doc {d}"
+
 /-- Parse an annotations dictionary; omitted members take their IDL default, false. -/
 def parseAnnotations (j : Json) : Except String Annotations := do
   let flag (k : String) : Except String Bool :=
@@ -71,14 +99,16 @@ def parseTool (j : Json) : Except String ModelContextTool := do
 def parseOp (j : Json) : Except String Op := do
   match ← (← field j "op").getStr? with
   | "register" =>
-    pure (.register (← parseTool j) (← (← nullable j "signal").mapM (·.getNat?)))
+    pure (.register (← parseTool j) (← (← nullable j "signal").mapM (·.getNat?))
+      (← parseOriginArgs j "exposedTo") (← parseDoc j))
   | "registerAbortSync" =>
-    pure (.registerAbortSync (← parseTool j) (← (← field j "signal").getNat?))
+    pure (.registerAbortSync (← parseTool j) (← (← field j "signal").getNat?)
+      (← parseOriginArgs j "exposedTo") (← parseDoc j))
   | "abort" => pure (.abort (← (← field j "signal").getNat?))
-  | "getTools" => pure .getTools
+  | "getTools" => pure (.getTools (← parseOriginArgs j "fromOrigins") (← parseDoc j))
   | "execute" =>
     pure (.execute (← (← field j "call").getNat?) (← (← field j "index").getNat?)
-      (← parseInput (← (← field j "input").getStr?)))
+      (← parseInput (← (← field j "input").getStr?)) (← parseDoc j))
   | o => throw s!"bad op {o}"
 
 /-- Parse one line: a JSON array of operations. -/

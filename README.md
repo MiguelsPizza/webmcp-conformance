@@ -42,32 +42,34 @@ You don't need to know Lean to follow `WebMCP/Model.lean` against the spec. Each
 
 ## Scope
 
-The model covers one slice of the spec, for a single document with same-origin callers:
+The model covers one slice of the spec, for a fixed frame tree of five documents on three origins (`harnessDocs` in `WebMCP/Model.lean`): a top-level document, a same-origin `<iframe>`, a cross-origin `<iframe>` nested in that, and two cross-origin `<iframe>`s of one origin, only one of which delegates the "tools" feature with `allow="tools"`.
 
-- `registerTool()`: Web IDL conversion failures, the validation steps in spec order, schema serialization, and unregistration through the registration signal, including aborting it before the call's promise settles
-- `getTools()`: every registered tool, sorted by name, with the `name`, `title`, `description`, `inputSchema`, `outputSchema` and `annotations` each `Tool` exposes
-- `executeTool()`: lookup by tool id, input serialization and "invalid input", and how each kind of callback outcome becomes a result string or an exception
+- `registerTool()`: Web IDL conversion failures, the validation steps in spec order, schema serialization, unregistration through the registration signal (including aborting it before the call's promise settles), `exposedTo` parsing and its `SecurityError`, and `NotAllowedError` in a document not allowed to use "tools"
+- `getTools()`: `fromOrigins` parsing, which documents of the frame tree are queried (same origin, or listed in `fromOrigins`, and allowed to use "tools"), which of their tools are exposed to the caller's origin, sorted by name with ties in tree order, with the `name`, `title`, `description`, `inputSchema`, `outputSchema` and `annotations` each `Tool` exposes, and its `source` and `origin`
+- `executeTool()`: lookup by tool id in the `Tool`'s source document, the exposure check against the caller's own origin, input serialization and "invalid input", and how each kind of callback outcome becomes a result string or an exception. A `Tool` can be executed from a document other than the one that discovered it.
 
 Author-supplied values (schemas, callback behaviours, inputs) come from small fixed sets, listed in `WebMCP/Model.lean`, not arbitrary JavaScript values.
 
-Not modelled yet: cross-frame and cross-origin exposure (`exposedTo`, `fromOrigins`), events, the execution `signal`, interleavings of calls that run in parallel or from queued tasks, and permissions policy.
+Not modelled yet: events (`toolchange`, `toolactivated`, `toolcancel`), the execution `signal`, interleavings of calls that run in parallel or from queued tasks, navigation and unloading (every document stays fully active, so "target document unloaded" never happens), documents in other traversables (`executeTool()`'s `InvalidStateError`), opaque origins (`NotSupportedError`), and frame trees other than the harness's.
 
 ## What's proved
 
 [`WebMCP/Proofs.lean`](WebMCP/Proofs.lean) proves, for every state reachable by any sequence of calls (`reachable_invariant`):
 
-- tool names stay unique, and a tool id identifies one registration
-- every registered tool has a valid name, a non-empty description, and a registration signal that hasn't fired
-- every `Tool` object's name is the name of the registration its tool id points to
+- tool names stay unique within each document, and a tool id identifies one registration
+- every registered tool has a valid name, a non-empty description, and a registration signal that hasn't fired, and lives in a document allowed to use "tools"
+- every `Tool` object's name and `source` are the name and document of the registration its tool id points to, and its `origin` is that document's origin
 - every abort step on a signal that hasn't fired yet targets a tool that is still registered
 
 From those:
 
-- **The spec's `executeTool()` assertion always holds** (`execute_assert_name`). Once `executeTool()` has serialized its input, it either rejects with `NotFoundError` or runs the execute steps of a registered definition with the `Tool`'s tool id and name, so the call runs exactly the registration `getTools()` returned.
+- **A tool is only discovered by an origin it is exposed to** (`getTools_exposed`). Every `Tool` that `getTools()` returns to a document comes from a document allowed to use "tools" that is same origin with the caller or listed in its `fromOrigins`, and the tool is exposed to the caller's origin in the spec's sense ("tool is exposed to an origin": same origin with the tool owner, or listed in its `exposedTo`). With no `fromOrigins`, only same-origin documents' tools come back (`getTools_same_origin`), and never a tool from a document not allowed to use "tools" (`getTools_not_from_disallowed`).
+- **A tool never runs for an origin it is not exposed to** (`executeTool_not_exposed`). If a `Tool`'s registration isn't exposed to the origin of the document calling `executeTool()`, the call rejects with `NotAllowedError`, `TypeError` or `NotFoundError` before the tool's callback runs, whichever document discovered the `Tool`. `executeTool_cases` lists everything `executeTool()` can do.
+- **The spec's `executeTool()` assertions always hold** (`execute_assert_name`). Once `executeTool()` has serialized its input, it either rejects with `NotFoundError` or runs the execute steps of a registered definition with the `Tool`'s tool id and name, in a document whose origin is the `Tool`'s `origin`, so the call runs exactly the registration `getTools()` returned.
 - **The spec's "unregister a tool" assertion always holds** (`unregister_assert_exists`). When a registration signal fires for the first time, every tool its abort steps unregister is still in the tool map. The model records those abort steps (`State.abortSteps`) only so this can be stated; no outcome depends on the record.
 - **A `Tool` whose registration is gone can never run anything again** (`stale_tool_not_found`). It fails with `NotFoundError` even if a new tool takes its name. This is the guarantee spec PR #348 introduced the `Tool` interface for.
-- `getTools()` lists tools in strictly increasing order of name (`getTools_sorted`), so it never returns two with the same name (`getTools_names_unique`). The order is Lean's `String` order, which is the spec's code-unit order for the ASCII names `registerTool()` accepts.
-- After `registerTool()` fulfills, a `getTools()` call made right after lists a tool with that name, and its title, description, schemas and annotations are the ones passed in (`registerTool_then_getTools`).
+- `getTools()` lists tools in increasing order of name, strictly so among one document's tools (`getTools_sorted`), so it never returns two with the same name from the same document (`getTools_names_unique`). The order is Lean's `String` order, which is the spec's code-unit order for the ASCII names `registerTool()` accepts.
+- After `registerTool()` fulfills, a `getTools()` call made right after in the same document lists a tool with that name as its own, and its title, description, schemas and annotations are the ones passed in (`registerTool_then_getTools`).
 - Aborting a registration signal removes exactly the tools registered with that signal and keeps every other tool, in order (`unregisterBySignal_tools`).
 - A rejected `registerTool()` leaves the tool map unchanged (`registerTool_err_state`).
 - `registerTool()`'s `Assert: signal is not aborted` holds (`registerTool_assert_signal`). This one follows directly from the check just before it.
@@ -78,14 +80,17 @@ Where each part of the spec the model transcribes lives in the Lean. Theorems ar
 
 | Spec anchor | Lean definition | Theorems | Examples |
 |---|---|---|---|
+| [`#tool-is-exposed-to-an-origin`](https://webmachinelearning.github.io/webmcp/#tool-is-exposed-to-an-origin) | `toolIsExposed` | `getTools_exposed`, `executeTool_not_exposed` | `two-sided-opt-in`, `provider-opt-in`, `execute-exposure` |
+| [`#model-context-register-tool-options`](https://webmachinelearning.github.io/webmcp/#model-context-register-tool-options), [`#model-context-get-tool-options`](https://webmachinelearning.github.io/webmcp/#model-context-get-tool-options) | `OriginArg`, `parseOrigins` | | `security`, `provider-opt-in` |
+| [`#permissions-policy`](https://webmachinelearning.github.io/webmcp/#permissions-policy) | `Doc`, `harnessDocs`, `docAllowed` | `getTools_not_from_disallowed` | `not-allowed` |
 | [`#model-context-tool`](https://webmachinelearning.github.io/webmcp/#model-context-tool) | `ModelContextTool`, `converts` | | `validation-order` |
 | [`#tool-definition`](https://webmachinelearning.github.io/webmcp/#tool-definition) | `ToolDef`, `newTool`, `validName` | `reachable_invariant` | `names` |
 | [`#tool-interface`](https://webmachinelearning.github.io/webmcp/#tool-interface) | `ToolObject`, `ToolView`, `ToolDef.view` | `registerTool_then_getTools` | `listed-and-runs` |
 | [`#serialize-a-tool-schema`](https://webmachinelearning.github.io/webmcp/#serialize-a-tool-schema) | `Schema.exposed` | | `sorted`, `schema-before-signal` |
 | [`#dom-modelcontext-registertool`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-registertool) | `registerTool`, `registerToolChecks`, `addTool`, `registerAbortSync` | `registerToolChecks_eq_none`, `registerTool_err_state`, `registerTool_then_getTools`, `registerTool_assert_signal` | `validation-order`, `schema-before-signal`, `abort-before-await`, `names` |
 | [`#model-context-unregister-a-tool`](https://webmachinelearning.github.io/webmcp/#model-context-unregister-a-tool) | `unregisterBySignal` | `unregister_assert_exists`, `unregisterBySignal_tools` | `unregistration-execution-race`, `abort-before-await` |
-| [`#dom-modelcontext-gettools`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-gettools) | `getTools`, `sortTools` | `getTools_sorted`, `getTools_names_unique` | `sorted` |
-| [`#dom-modelcontext-executetool`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-executetool) | `executeTool`, `completionOutcome` | `execute_assert_name`, `stale_tool_not_found` | `unregistration-execution-race`, `results` |
+| [`#dom-modelcontext-gettools`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-gettools) | `getTools`, `requested`, `discover`, `sortTools` | `getTools_exposed`, `getTools_same_origin`, `getTools_sorted`, `getTools_names_unique` | `sorted`, `two-sided-opt-in`, `same-origin-frames` |
+| [`#dom-modelcontext-executetool`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-executetool) | `executeTool`, `lookup`, `completionOutcome` | `executeTool_cases`, `executeTool_not_exposed`, `execute_assert_name`, `stale_tool_not_found` | `unregistration-execution-race`, `results`, `execute-exposure` |
 | [`#tool-execute-steps`](https://webmachinelearning.github.io/webmcp/#tool-execute-steps) | `toolExecuteSteps` | `stale_tool_not_found` | `unregistration-execution-race` |
 | [`#invoke-the-execute-callback`](https://webmachinelearning.github.io/webmcp/#invoke-the-execute-callback) | `invokeExecuteCallback`, `callbackResult` | | `listed-and-runs`, `results` |
 | [`#tool-execution-error`](https://webmachinelearning.github.io/webmcp/#tool-execution-error) | `ToolExecutionError`, `ToolExecutionError.exceptionName` | | `results`, `unregistration-execution-race` |
@@ -95,6 +100,7 @@ Where each part of the spec the model transcribes lives in the Lean. Theorems ar
 - Every call that returns a promise must return one. A synchronous throw is reported as `threw:` and doesn't count as a rejection.
 - An exception matches only if it is a real `DOMException` (or `TypeError`) with the expected name.
 - Each call has a 5-second timeout, so an implementation that never settles a promise shows up as `timeout` instead of hanging the run.
+- The harness serves the frame tree from a local HTTP server, with origins 0, 1 and 2 as `http://127.0.0.1:<port A>`, `http://localhost:<port A>` and `http://127.0.0.1:<port B>` (loopback, so potentially trustworthy), and origin 3 as `https://other.example`, which no document has. Each operation runs in the document it names (`doc`), with registration signal `n` belonging to document `n / 3`. A `Tool` is printed with `@<document>` when its `source` is another document's window, and, for operations that name a document, with `!origin=<value>` when its `origin` isn't its source document's.
 - `--known` treats the result-serialization differences in spec issue #361 as equal and counts them, so they don't hide other bugs later in the same trace.
 
 ## What this does and doesn't guarantee

@@ -61,4 +61,48 @@ def outcomes (ops : List Op) : List String :=
     .register { tool "B" with title := some "T" } none, .getTools] ==
   ["ok", "ok", "tools:B|T|d|null|null|null;b||d|{\"type\":\"string\"}|null|null"]
 
+/-! ### Frames and origins
+
+Documents are numbered as in `harnessDocs`: 0 and 1 share origin 0, 2 has origin 2, and 3 and 4
+have origin 1, where 4's `<iframe>` doesn't delegate "tools". -/
+
+-- `two-sided-opt-in`, the spec's own example: a cross-origin frame exposes a tool to its
+-- parent's origin, and the parent sees it only once it also asks for that origin.
+#guard outcomes [.register (tool "chart") none [.origin 0] 3, .getTools [] 0,
+    .getTools [.origin 1] 0, .execute 1 0 (.obj 1) 0] ==
+  ["ok", "tools:", "tools:chart||d|null|null|null@3", "result:{\"n\":1}"]
+
+-- `provider-opt-in`: asking for an origin is not enough; the tool must be exposed to the
+-- caller's origin too. A URL with a path names its origin.
+#guard outcomes [.register (tool "w") none [] 3, .register (tool "v") none [.withPath 2] 3,
+    .getTools [.origin 1] 0, .getTools [.origin 1] 2] ==
+  ["ok", "ok", "tools:", "tools:v||d|null|null|null@3"]
+
+-- `same-origin-frames`: same-origin documents see each other's tools without asking. Each
+-- document has its own tool map, so names repeat across documents, in tree order.
+#guard outcomes [.register (tool "a") none [] 1, .register (tool "a") none [] 0,
+    .register (tool "b") none [] 0, .getTools [] 0, .getTools [] 2] ==
+  ["ok", "ok", "ok", "tools:a||d|null|null|null;a||d|null|null|null@1;b||d|null|null|null",
+   "tools:"]
+
+-- `not-allowed`: a cross-origin frame whose `<iframe>` doesn't delegate "tools" can't use the
+-- API, and Web IDL conversion still comes first.
+#guard outcomes [.register (tool "a") none [] 4, .register { tool "a" with description := none }
+    none [] 4, .getTools [] 4] ==
+  ["err:NotAllowedError", "err:TypeError", "err:NotAllowedError"]
+
+-- `security`: `exposedTo` and `fromOrigins` entries must be potentially trustworthy origins.
+-- The `exposedTo` check comes after the signal check.
+#guard outcomes [.register (tool "a") none [.origin 0, .insecure] 0, .abort 0,
+    .register (tool "a") (some 0) [.invalid] 0, .getTools [.invalid] 0, .getTools [.insecure] 4] ==
+  ["err:SecurityError", "ok", "err:AbortError", "err:SecurityError", "err:NotAllowedError"]
+
+-- `execute-exposure`: `executeTool()` checks exposure again against the caller's own origin. A
+-- same-origin document can run a `Tool` another one discovered; a document of an origin the tool
+-- isn't exposed to gets `NotFoundError`, as for a tool that is gone.
+#guard outcomes [.register (tool "chart") none [.origin 0] 3, .getTools [.origin 1] 0,
+    .execute 0 0 (.obj 2) 1, .execute 0 0 (.obj 2) 2, .execute 0 0 (.obj 2) 4] ==
+  ["ok", "tools:chart||d|null|null|null@3", "result:{\"n\":2}", "err:NotFoundError",
+   "err:NotAllowedError"]
+
 end WebMCP.Examples

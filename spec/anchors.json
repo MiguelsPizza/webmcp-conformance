@@ -55,6 +55,26 @@
       "anchor": "tool-interface",
       "marker": "<h4 id=\"tool-interface\">",
       "sha256": "e07a32b0107e694c"
+    },
+    {
+      "anchor": "tool-is-exposed-to-an-origin",
+      "marker": "To determine if a <dfn>tool is exposed to an origin</dfn>",
+      "sha256": "9a4e2d0f507da6b5"
+    },
+    {
+      "anchor": "model-context-register-tool-options",
+      "marker": "<h4 id=\"model-context-register-tool-options\">",
+      "sha256": "e9506d67adf68bc3"
+    },
+    {
+      "anchor": "model-context-get-tool-options",
+      "marker": "<h4 id=\"model-context-get-tool-options\">",
+      "sha256": "2b2b53a9241a7001"
+    },
+    {
+      "anchor": "permissions-policy",
+      "marker": "<h3 id=\"permissions-policy\">",
+      "sha256": "d99ffbb901341110"
     }
   ]
 }
