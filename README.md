@@ -20,14 +20,15 @@ The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a smal
 
 ## Reading the Lean
 
-You don't need to know Lean to follow `WebMCP/Model.lean` against the spec. Each definition's docstring names the spec algorithm (`Spec: #anchor`), and each check inside it quotes the step it models. The module doc at the top of the file has a table from spec terms (tool definition, `Tool`, tool id) to Lean names. The syntax that comes up most:
+You don't need to know Lean to follow `WebMCP/Model.lean` against the spec. Each definition's docstring names the spec algorithm (`Spec: #anchor`), and each check inside it quotes the step it models. The module doc at the top of the file has a table from spec terms (tool definition, `Tool`, tool id, tool execution error) to Lean names, and [Spec mapping](#spec-mapping) below goes from each spec anchor to its definitions, theorems and examples. The syntax that comes up most:
 
 | Lean | Roughly, in JavaScript |
 |---|---|
-| `def f (s : State) (t : ToolArgs) : Outcome := ...` | `function f(s, t) { return ... }`, with types |
+| `def f (s : State) (t : ModelContextTool) : Outcome := ...` | `function f(s, t) { return ... }`, with types |
 | `structure ToolDef where id : Nat ...` | a plain object type with those fields |
 | `inductive Err where \| typeError \| abort ...` | an enum (each case can carry data) |
 | `.err .abort` | `{kind: "err", error: "AbortError"}` |
+| `Except ToolExecutionError String`, `.ok r`, `.error e` | a result `r` or a failure reason `e`, like a settled promise |
 | `Option String`, `some x`, `none` | a value that may be absent: `x` or `null` |
 | `match x with \| some v => a \| none => b` | `x != null ? a : b`, with `v = x` |
 | `{ s with tools := ts }` | `{...s, tools: ts}` |
@@ -58,13 +59,36 @@ Not modelled yet: cross-frame and cross-origin exposure (`exposedTo`, `fromOrigi
 - tool names stay unique, and a tool id identifies one registration
 - every registered tool has a valid name, a non-empty description, and a registration signal that hasn't fired
 - every `Tool` object's name is the name of the registration its tool id points to
+- every abort step on a signal that hasn't fired yet targets a tool that is still registered
 
 From those:
 
-- **The spec's `executeTool()` assertion always holds** (`execute_assert_name`). When a `Tool`'s registration is still in the tool map, the definition found there has the `Tool`'s name, so the call runs exactly the registration `getTools()` returned.
-- **A `Tool` whose registration is gone can never run anything again** (`stale_handle_not_found`). It fails with `NotFoundError` even if a new tool takes its name. This is the guarantee spec PR #348 introduced the `Tool` interface for.
-- `getTools()` never returns two tools with the same name (`getTools_names_unique`).
-- A rejected `registerTool()` leaves the tool map unchanged (`register_err_state`).
+- **The spec's `executeTool()` assertion always holds** (`execute_assert_name`). Once `executeTool()` has serialized its input, it either rejects with `NotFoundError` or runs the execute steps of a registered definition with the `Tool`'s tool id and name, so the call runs exactly the registration `getTools()` returned.
+- **The spec's "unregister a tool" assertion always holds** (`unregister_assert_exists`). When a registration signal fires for the first time, every tool its abort steps unregister is still in the tool map. The model records those abort steps (`State.abortSteps`) only so this can be stated; no outcome depends on the record.
+- **A `Tool` whose registration is gone can never run anything again** (`stale_tool_not_found`). It fails with `NotFoundError` even if a new tool takes its name. This is the guarantee spec PR #348 introduced the `Tool` interface for.
+- `getTools()` lists tools in strictly increasing order of name (`getTools_sorted`), so it never returns two with the same name (`getTools_names_unique`). The order is Lean's `String` order, which is the spec's code-unit order for the ASCII names `registerTool()` accepts.
+- After `registerTool()` fulfills, a `getTools()` call made right after lists a tool with that name, and its title, description, schemas and annotations are the ones passed in (`registerTool_then_getTools`).
+- Aborting a registration signal removes exactly the tools registered with that signal and keeps every other tool, in order (`unregisterBySignal_tools`).
+- A rejected `registerTool()` leaves the tool map unchanged (`registerTool_err_state`).
+- `registerTool()`'s `Assert: signal is not aborted` holds (`registerTool_assert_signal`). This one follows directly from the check just before it.
+
+## Spec mapping
+
+Where each part of the spec the model transcribes lives in the Lean. Theorems are in [`WebMCP/Proofs.lean`](WebMCP/Proofs.lean); examples are the named `#guard`s in [`WebMCP/Examples.lean`](WebMCP/Examples.lean).
+
+| Spec anchor | Lean definition | Theorems | Examples |
+|---|---|---|---|
+| [`#model-context-tool`](https://webmachinelearning.github.io/webmcp/#model-context-tool) | `ModelContextTool`, `converts` | | `validation-order` |
+| [`#tool-definition`](https://webmachinelearning.github.io/webmcp/#tool-definition) | `ToolDef`, `newTool`, `validName` | `reachable_invariant` | `names` |
+| [`#tool-interface`](https://webmachinelearning.github.io/webmcp/#tool-interface) | `ToolObject`, `ToolView`, `ToolDef.view` | `registerTool_then_getTools` | `listed-and-runs` |
+| [`#serialize-a-tool-schema`](https://webmachinelearning.github.io/webmcp/#serialize-a-tool-schema) | `Schema.exposed` | | `sorted`, `schema-before-signal` |
+| [`#dom-modelcontext-registertool`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-registertool) | `registerTool`, `registerToolChecks`, `addTool`, `registerAbortSync` | `registerToolChecks_eq_none`, `registerTool_err_state`, `registerTool_then_getTools`, `registerTool_assert_signal` | `validation-order`, `schema-before-signal`, `abort-before-await`, `names` |
+| [`#model-context-unregister-a-tool`](https://webmachinelearning.github.io/webmcp/#model-context-unregister-a-tool) | `unregisterBySignal` | `unregister_assert_exists`, `unregisterBySignal_tools` | `unregistration-execution-race`, `abort-before-await` |
+| [`#dom-modelcontext-gettools`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-gettools) | `getTools`, `sortTools` | `getTools_sorted`, `getTools_names_unique` | `sorted` |
+| [`#dom-modelcontext-executetool`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-executetool) | `executeTool`, `completionOutcome` | `execute_assert_name`, `stale_tool_not_found` | `unregistration-execution-race`, `results` |
+| [`#tool-execute-steps`](https://webmachinelearning.github.io/webmcp/#tool-execute-steps) | `toolExecuteSteps` | `stale_tool_not_found` | `unregistration-execution-race` |
+| [`#invoke-the-execute-callback`](https://webmachinelearning.github.io/webmcp/#invoke-the-execute-callback) | `invokeExecuteCallback`, `callbackResult` | | `listed-and-runs`, `results` |
+| [`#tool-execution-error`](https://webmachinelearning.github.io/webmcp/#tool-execution-error) | `ToolExecutionError`, `ToolExecutionError.exceptionName` | | `results`, `unregistration-execution-race` |
 
 ## How implementations are compared
 

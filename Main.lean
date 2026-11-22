@@ -55,7 +55,7 @@ def parseAnnotations (j : Json) : Except String Annotations := do
          consequential := ← flag "consequentialHint", debugging := ← flag "debugging" }
 
 /-- Parse the tool members of a register operation. -/
-def parseTool (j : Json) : Except String ToolArgs := do
+def parseTool (j : Json) : Except String ModelContextTool := do
   pure {
     name := ← (← field j "name").getStr?,
     title := ← (← nullable j "title").mapM (·.getStr?),

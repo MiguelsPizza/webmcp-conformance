@@ -36,22 +36,31 @@ for this slice or listed as not covered in the README:
 
 | Spec | Lean |
 |---|---|
-| `ModelContextTool` dictionary (the `registerTool()` argument) | `ToolArgs` |
+| `ModelContextTool` dictionary (the `registerTool()` argument) | `ModelContextTool` |
 | tool definition (a value in the tool map) | `ToolDef` |
-| tool id | `ToolDef.id`, `Handle.id` |
-| `Tool` object returned by `getTools()` | `Handle` (what the caller holds), `ToolView` (what it exposes) |
+| tool id | `ToolDef.id`, `ToolObject.id` |
+| `Tool` object returned by `getTools()` | `ToolObject` (what the caller holds), `ToolView` (what it exposes) |
 | model context (its tool map) | `State` (`State.tools`) |
-| `registerTool()` validation steps | `registerCheck` |
-| unregister a tool (via the registration `signal`) | `abort` |
+| `registerTool()` | `registerTool`; its validation steps are `registerToolChecks` |
+| the abort steps `registerTool()` adds to its `signal` | `ToolDef.signal`, `State.abortSteps` |
+| unregister a tool (run by those abort steps) | `unregisterBySignal` |
 | `getTools()` | `getTools` |
-| `executeTool()`, tool execute steps | `execute` |
-| invoke the execute callback | `runTool`, `callbackResult` |
+| `executeTool()` | `executeTool` |
+| tool execute steps | `toolExecuteSteps` |
+| invoke the execute callback | `invokeExecuteCallback`, `callbackResult` |
+| tool execution error, its corresponding exception name | `ToolExecutionError`, `ToolExecutionError.exceptionName` |
+| `executeTool()`'s `completionSteps` | `completionOutcome` |
+
+`Tool` alone is not used as a Lean name: the spec's `Tool` object is split here into the
+`ToolObject` a caller holds and the `ToolView` it exposes, and a bare `Tool` would read as either,
+or as the `ModelContextTool` dictionary.
 -/
 namespace WebMCP
 
-/-- An exception name a caller can observe: the `TypeError`s thrown by Web IDL and by JSON
-    serialization, and the `DOMException` names the spec rejects with.
-    Spec: #tool-execution-error -/
+/-- An exception a caller can observe: the `TypeError`s thrown by Web IDL and by JSON
+    serialization, and the `DOMException` names the spec rejects with. Failures of a tool's
+    execution reach the caller only as one of these, through
+    `ToolExecutionError.exceptionName`. -/
 inductive Err where
   /-- A `TypeError`. -/
   | typeError
@@ -66,6 +75,27 @@ inductive Err where
   /-- An `"OperationError"` `DOMException` ("tool rejected" or "unserializable result"). -/
   | operation
   deriving Repr, DecidableEq
+
+/-- A "tool execution error": why a tool execution failed. "target document unloaded" is left
+    out, since the model has one document and it never unloads. -/
+inductive ToolExecutionError where
+  /-- "tool not found": the tool is not registered in the target document. -/
+  | toolNotFound
+  /-- "invalid input": the input arguments could not be parsed into a JavaScript Object. -/
+  | invalidInput
+  /-- "tool rejected": the `execute` callback returned a rejected promise. -/
+  | toolRejected
+  /-- "unserializable result": the tool's result could not be serialized to a JSON string. -/
+  | unserializableResult
+  deriving Repr, DecidableEq
+
+/-- A tool execution error's "corresponding exception name", row by row from the spec's table.
+    Spec: #tool-execution-error -/
+def ToolExecutionError.exceptionName : ToolExecutionError → Err
+  | .toolNotFound         => .notFound
+  | .invalidInput         => .dataError
+  | .toolRejected         => .operation
+  | .unserializableResult => .operation
 
 /-- The exception's `name`, as the harness reports it. -/
 def Err.name : Err → String
@@ -177,7 +207,7 @@ def Input.keysJSON : Input → String
 
 /-- The arguments to `registerTool()`, as JavaScript values before Web IDL conversion.
     Spec: #model-context-tool -/
-structure ToolArgs where
+structure ModelContextTool where
   /-- `name` -/
   name : String
   /-- `title`, or `none` when omitted. -/
@@ -213,12 +243,13 @@ structure ToolDef where
   annotations : Option Annotations
   /-- What the tool's callback does ("execute steps"). -/
   behavior : Behavior
-  /-- The registration signal whose abort steps unregister this tool. -/
+  /-- The registration signal whose abort steps unregister this tool. The spec keeps this on
+      the signal's abort steps instead; the model only needs to know which signal it was. -/
   signal : Option Nat
   deriving Repr
 
 /-- A `Tool` object returned by `getTools()`: the "tool id" it identifies and its name. -/
-structure Handle where
+structure ToolObject where
   /-- `Tool`'s "tool id" -/
   id : Nat
   /-- `Tool`'s "name" -/
@@ -251,15 +282,20 @@ structure State where
   /-- The `AbortSignal`s that have fired. -/
   aborted : List Nat := []
   /-- The `Tool` objects each `getTools()` call returned, in order. -/
-  handles : List (List Handle) := []
+  toolObjects : List (List ToolObject) := []
+  /-- The "unregister a tool" abort steps `registerTool()` added, as (signal, tool id) pairs in
+      the order they were added. The model never reads this: unregistering goes by
+      `ToolDef.signal`. It is kept so that `Proofs.lean` can state the spec's `Assert` in
+      "unregister a tool" about the steps the spec actually runs. -/
+  abortSteps : List (Nat × Nat) := []
   deriving Repr
 
 /-- One call the harness makes. -/
 inductive Op where
   /-- `await registerTool(t, {signal})`. -/
-  | register (t : ToolArgs) (signal : Option Nat)
+  | register (t : ModelContextTool) (signal : Option Nat)
   /-- `registerTool(t, {signal})`, then abort that signal before awaiting the promise. -/
-  | registerAbortSync (t : ToolArgs) (signal : Nat)
+  | registerAbortSync (t : ModelContextTool) (signal : Nat)
   /-- Abort a registration signal. -/
   | abort (signal : Nat)
   /-- `await getTools()`. -/
@@ -316,12 +352,12 @@ def ids (s : State) : List Nat := s.tools.map (·.id)
 /-- Whether converting the arguments to a `ModelContextTool` dictionary succeeds. Web IDL
     converts the dictionary before the method steps run, so any failure here is a `TypeError`
     that comes before every spec step. -/
-def converts (t : ToolArgs) : Bool :=
+def converts (t : ModelContextTool) : Bool :=
   t.description.isSome && t.inputSchema != .nonObject && t.outputSchema != .nonObject
 
 /-- The checks of `registerTool()`, in spec order. `none` means the tool is registered.
     Spec: #dom-modelcontext-registertool -/
-def registerCheck (s : State) (t : ToolArgs) (sig : Option Nat) : Option Err :=
+def registerToolChecks (s : State) (t : ModelContextTool) (sig : Option Nat) : Option Err :=
   -- Web IDL dictionary conversion.
   if !converts t then some .typeError
   -- "If tool map's values contains a tool definition whose name is tool name ..."
@@ -339,26 +375,30 @@ def registerCheck (s : State) (t : ToolArgs) (sig : Option Nat) : Option Err :=
   else none
 
 /-- The tool definition `registerTool()` adds when every check passes. -/
-def newTool (s : State) (t : ToolArgs) (sig : Option Nat) : ToolDef :=
+def newTool (s : State) (t : ModelContextTool) (sig : Option Nat) : ToolDef :=
   { id := s.nextId, name := t.name, title := t.title, description := t.description.getD "",
     inputSchema := t.inputSchema, outputSchema := t.outputSchema,
     annotations := t.annotations, behavior := t.behavior, signal := sig }
 
-/-- Add the new tool definition to the tool map under a fresh tool id. -/
-def insert (s : State) (t : ToolArgs) (sig : Option Nat) : State :=
-  { s with nextId := s.nextId + 1, tools := s.tools ++ [newTool s t sig] }
+/-- Add the new tool definition to the tool map under a fresh tool id, and, when a signal was
+    given, the abort steps that unregister it. -/
+def addTool (s : State) (t : ModelContextTool) (sig : Option Nat) : State :=
+  { s with nextId := s.nextId + 1, tools := s.tools ++ [newTool s t sig],
+           abortSteps := match sig with
+             | some g => s.abortSteps ++ [(g, s.nextId)]
+             | none   => s.abortSteps }
 
 /-- `registerTool()`, awaited. The document is fully active and allowed to use "tools".
     Spec: #dom-modelcontext-registertool -/
-def register (s : State) (t : ToolArgs) (sig : Option Nat) : State × Outcome :=
-  match registerCheck s t sig with
+def registerTool (s : State) (t : ModelContextTool) (sig : Option Nat) : State × Outcome :=
+  match registerToolChecks s t sig with
   | some e => (s, .err e)
-  | none   => (insert s t sig, .ok)
+  | none   => (addTool s t sig, .ok)
 
-/-- Aborting a registration signal runs "unregister a tool" for each tool it registered.
-    A signal aborts at most once.
+/-- Aborting a registration signal runs its abort steps: "unregister a tool" for each tool it
+    registered. A signal aborts at most once.
     Spec: #model-context-unregister-a-tool -/
-def abort (s : State) (sig : Nat) : State × Outcome :=
+def unregisterBySignal (s : State) (sig : Nat) : State × Outcome :=
   if s.aborted.contains sig then (s, .ok)
   else ({ s with aborted := sig :: s.aborted,
                  tools := s.tools.filter (·.signal != some sig) }, .ok)
@@ -367,9 +407,9 @@ def abort (s : State) (sig : Nat) : State × Outcome :=
     was registered, the abort steps unregister it and reject the promise with the abort reason
     before the queued task can resolve it.
     Spec: #dom-modelcontext-registertool -/
-def registerAbortSync (s : State) (t : ToolArgs) (sig : Nat) : State × Outcome :=
-  let (s', o) := register s t (some sig)
-  let (s'', _) := abort s' sig
+def registerAbortSync (s : State) (t : ModelContextTool) (sig : Nat) : State × Outcome :=
+  let (s', o) := registerTool s t (some sig)
+  let (s'', _) := unregisterBySignal s' sig
   (s'', if o == .ok then .err .abort else o)
 
 /-- The `Tool` view of a tool definition, as `getTools()` builds it. -/
@@ -387,60 +427,75 @@ def sortTools (l : List ToolDef) : List ToolDef :=
     Spec: #dom-modelcontext-gettools -/
 def getTools (s : State) : State × Outcome :=
   let found := sortTools s.tools
-  ({ s with handles := s.handles ++ [found.map fun d => ⟨d.id, d.name⟩] },
+  ({ s with toolObjects := s.toolObjects ++ [found.map fun d => ⟨d.id, d.name⟩] },
    .tools (found.map ToolDef.view))
 
-/-- The result of a callback that fulfilled, after "serializing a JavaScript value to a JSON
-    string", or `none` when that throws ("unserializable result").
+/-- How the author's callback settles, after "serializing a JavaScript value to a JSON string"
+    for a fulfilled one: the result string, "unserializable result" when that throws, or
+    "tool rejected".
     Spec: #invoke-the-execute-callback -/
-def callbackResult (b : Behavior) (input : Input) (json : String) : Option String :=
+def callbackResult (b : Behavior) (input : Input) (json : String) :
+    Except ToolExecutionError String :=
   match b with
-  | .echo            => some json
-  | .keys            => some input.keysJSON
-  | .returnText      => some "\"hi\""
-  | .returnEmpty     => some "\"\""
-  | .returnNull      => some "null"
-  | .returnNumber    => some "5"
-  | .returnUndefined => none
-  | .returnCyclic    => none
-  | .reject          => none
-  | .throwSync       => none
+  -- "If toolPromise was fulfilled with value v": serialize v.
+  | .echo            => .ok json
+  | .keys            => .ok input.keysJSON
+  | .returnText      => .ok "\"hi\""
+  | .returnEmpty     => .ok "\"\""
+  | .returnNull      => .ok "null"
+  | .returnNumber    => .ok "5"
+  -- "If this throws an exception, run completionSteps given null and unserializable result"
+  | .returnUndefined => .error .unserializableResult
+  | .returnCyclic    => .error .unserializableResult
+  -- "If toolPromise was rejected with reason r": "tool rejected"
+  | .reject          => .error .toolRejected
+  | .throwSync       => .error .toolRejected
 
-/-- What running a tool definition's execute steps settles with.
+/-- Run a tool definition's execute steps ("invoke the execute callback"): parse the input, then
+    run the author's callback.
     Spec: #invoke-the-execute-callback -/
-def runTool (d : ToolDef) (input : Input) (json : String) : Outcome :=
-  -- "If inputObject is not an Object ... invalid input"
-  if !input.parsesToObject then .err .dataError
-  -- "tool rejected", and "unserializable result" for a fulfilled callback
-  else match callbackResult d.behavior input json with
-    | some r => .result r
-    | none   => .err .operation
+def invokeExecuteCallback (d : ToolDef) (input : Input) (json : String) :
+    Except ToolExecutionError String :=
+  -- "If inputObject is not an Object, then run completionSteps given null and invalid input"
+  if !input.parsesToObject then .error .invalidInput
+  else callbackResult d.behavior input json
 
-/-- `executeTool()`, "tool execute steps" and "invoke the execute callback". The in-parallel
-    lookup in `executeTool()` and the one in "tool execute steps" are merged: with calls awaited
-    one at a time, nothing can unregister the tool between them.
-    Spec: #dom-modelcontext-executetool
+/-- "tool execute steps": look the tool up by its tool id, then run its execute steps.
     Spec: #tool-execute-steps -/
-def execute (s : State) (call index : Nat) (input : Input) : State × Outcome :=
-  match (s.handles[call]?).bind (·[index]?) with
+def toolExecuteSteps (s : State) (toolId : Nat) (input : Input) (json : String) :
+    Except ToolExecutionError String :=
+  -- "If toolMap[toolId] does not exist, then run completionSteps given null and tool not found"
+  match s.tools.find? (·.id == toolId) with
+  | none   => .error .toolNotFound
+  | some d => invokeExecuteCallback d input json
+
+/-- `executeTool()`'s `completionSteps`: resolve with the result, or reject with a
+    `DOMException` whose name is the error's "corresponding exception name".
+    Spec: #dom-modelcontext-executetool -/
+def completionOutcome : Except ToolExecutionError String → Outcome
+  | .ok r    => .result r
+  | .error e => .err e.exceptionName
+
+/-- `executeTool()`. Its in-parallel lookup of the tool id and the one in "tool execute steps"
+    are merged into `toolExecuteSteps`: with calls awaited one at a time, nothing can unregister
+    the tool between them, and both reject with `NotFoundError`.
+    Spec: #dom-modelcontext-executetool -/
+def executeTool (s : State) (call index : Nat) (input : Input) : State × Outcome :=
+  match (s.toolObjects[call]?).bind (·[index]?) with
   | none => (s, .invalidRequest)
-  | some h =>
+  | some tool =>
     -- "serializing a JavaScript value to a JSON string" given inputObject
     match input.serialize with
     | none => (s, .err .typeError)
-    | some json =>
-      -- "If targetToolMap[toolId] does not exist ... NotFoundError"
-      match s.tools.find? (·.id == h.id) with
-      | none   => (s, .err .notFound)
-      | some d => (s, runTool d input json)
+    | some json => (s, completionOutcome (toolExecuteSteps s tool.id input json))
 
 /-- One call. -/
 def step (s : State) : Op → State × Outcome
-  | .register t sig          => register s t sig
+  | .register t sig          => registerTool s t sig
   | .registerAbortSync t sig => registerAbortSync s t sig
-  | .abort sig               => abort s sig
+  | .abort sig               => unregisterBySignal s sig
   | .getTools                => getTools s
-  | .execute c i input       => execute s c i input
+  | .execute c i input       => executeTool s c i input
 
 /-- A sequence of calls, each awaited before the next. -/
 def run (s : State) : List Op → State × List Outcome
