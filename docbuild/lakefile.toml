@@ -1,0 +1,15 @@
+# Builds the HTML docs with doc-gen4. A separate package so the root one stays
+# dependency-free. From this directory: `lake build WebMCP:docs`, then open
+# .lake/build/doc/index.html.
+name = "docbuild"
+reservoir = false
+version = "0.1.0"
+
+[[require]]
+name = "webmcp-conformance"
+path = "../"
+
+[[require]]
+name = "doc-gen4"
+git = "https://github.com/leanprover/doc-gen4"
+rev = "v4.36.0"

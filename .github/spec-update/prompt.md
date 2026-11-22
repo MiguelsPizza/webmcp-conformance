@@ -4,7 +4,8 @@ A person will review your change against the spec diff before it merges, so make
 ## The repository
 
 - `WebMCP/Model.lean`: the model. Each definition cites the spec passage it transcribes as
-  `Spec: #<anchor>` plus the step. Its header and `README.md` say what is in and out of scope.
+  `Spec: [#<anchor>](https://webmachinelearning.github.io/webmcp/#<anchor>)` (a link in the
+  generated docs) plus the step. Its header and `README.md` say what is in and out of scope.
 - `spec/anchors.json`: the spec commit modelled, and for each spec passage the model transcribes,
   a marker string that locates it in `index.bs` and a hash of its text. The workflow refreshes the
   commit and hashes after you finish; you only edit it when a passage is added, removed, or its
@@ -41,7 +42,8 @@ A person will review your change against the spec diff before it merges, so make
    new prose is ambiguous, model the most literal reading and say so in your summary.
 3. Update the spec commit named in the header of `Model.lean` and in `README.md` (if they name
    one) to the new short commit. If the change adds a passage the model now transcribes, add it to
-   `spec/anchors.json` (any hash; the workflow recomputes it) and cite it as `Spec: #<anchor>`.
+   `spec/anchors.json` (any hash; the workflow recomputes it) and cite it the same way,
+   `Spec: [#<anchor>](https://webmachinelearning.github.io/webmcp/#<anchor>)`.
 4. If the model gains an operation, outcome, or input the harness has to generate or run, extend
    `WebMCP/Oracle.lean` and `harness/run.cjs` to match, keeping their existing style.
 5. Run `lake build --wfail WebMCP oracle`. It must pass with no warnings, and the build lints

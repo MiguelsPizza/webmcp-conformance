@@ -10,7 +10,7 @@ The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a smal
 
 | Path | What it is |
 |---|---|
-| [`WebMCP/Model.lean`](WebMCP/Model.lean) | The model. Each definition cites the spec algorithm it transcribes (`Spec: #anchor`), and the file lists every simplification it makes. |
+| [`WebMCP/Model.lean`](WebMCP/Model.lean) | The model. Each definition cites the spec algorithm it transcribes (`Spec: [#anchor](…)`), and the file lists every simplification it makes. |
 | [`WebMCP/Proofs.lean`](WebMCP/Proofs.lean) | Proofs about the model. The build fails if any of them rests on `sorry`. |
 | [`WebMCP/Examples.lean`](WebMCP/Examples.lean) | Hand-written traces with the outcomes the spec requires, including the spec's own examples, checked at build time. |
 | [`WebMCP/Oracle.lean`](WebMCP/Oracle.lean), [`Main.lean`](Main.lean) | The oracle: JSON traces in, the spec's outcomes out. `Oracle.lean` has the wire format, `Main.lean` the loop over stdin. |
@@ -23,10 +23,11 @@ The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a smal
 | [`wpt-export/`](wpt-export), [`tools/export-wpt.cjs`](tools/export-wpt.cjs), [`tools/run-wpt-export.cjs`](tools/run-wpt-export.cjs) | The repros as WPT testharness.js tests (not submitted), and a Playwright runner for them. |
 | [`ReplayTest.lean`](ReplayTest.lean) | `lake test`: replays the corpus and repros through the oracle. |
 | [`spec/anchors.json`](spec/anchors.json), [`tools/check-spec.cjs`](tools/check-spec.cjs) | The spec commit the model reflects, and a hash of each part of `index.bs` it transcribes. |
+| [`docbuild/`](docbuild/lakefile.toml) | Builds browsable HTML docs (docstrings, spec quotes, theorem statements) with doc-gen4, kept separate so the main package has no dependencies. |
 
 ## Reading the Lean
 
-You don't need to know Lean to follow `WebMCP/Model.lean` against the spec. Each definition's docstring names the spec algorithm (`Spec: #anchor`), and each check inside it quotes the step it models. The module doc at the top of the file has a table from spec terms (tool definition, `Tool`, tool id, tool execution error) to Lean names, and [Spec mapping](#spec-mapping) below goes from each spec anchor to its definitions, theorems and examples. The syntax that comes up most:
+You don't need to know Lean to follow `WebMCP/Model.lean` against the spec. Each definition's docstring links the spec algorithm (`Spec: [#anchor](…)`), and each check inside it quotes the step it models. The module doc at the top of the file has a table from spec terms (tool definition, `Tool`, tool id, tool execution error) to Lean names, and [Spec mapping](#spec-mapping) below goes from each spec anchor to its definitions, theorems and examples. The syntax that comes up most:
 
 | Lean | Roughly, in JavaScript |
 |---|---|
@@ -141,6 +142,14 @@ To turn the repros into WPT tests and run them (see [`wpt-export/README.md`](wpt
 node tools/export-wpt.cjs repros/*.json --focus
 node tools/run-wpt-export.cjs <wpt checkout> <target>
 ```
+
+Docs: the same docstrings, spec quotes and theorem statements as HTML pages, built with doc-gen4. The [Docs workflow](.github/workflows/docs.yml) builds them on every push to main and attaches them to the run as the `docs` artifact. Locally (the first build compiles doc-gen4 and takes about 8 minutes; later ones take under a minute):
+
+```
+cd docbuild && DOCGEN_SRC=file lake build WebMCP:docs   # then open .lake/build/doc/WebMCP/Model.html
+```
+
+`DOCGEN_SRC=file` links each declaration to its local source file; leave it out to link to GitHub, which needs an `origin` remote on GitHub.
 
 ## Keeping it current
 
