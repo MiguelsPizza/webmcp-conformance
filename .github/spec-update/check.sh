@@ -16,12 +16,14 @@ if ! lake build --wfail WebMCP oracle >"$log" 2>&1; then
 fi
 echo "ok   lake build --wfail (model, proofs, oracle)"
 
-axioms=$(grep -E "depends on axioms|does not depend on any axioms" "$log" || true)
+# Axiom reports come either from bare `#print axioms` (in the build log) or from the expected
+# output pinned above a `#guard_msgs in #print axioms` (in the source, which the build enforces).
+axioms=$( { cat "$log"; cat WebMCP/*.lean; } | grep -E "depends on axioms|does not depend on any axioms" || true)
 if [ -z "$axioms" ]; then
-  echo "FAIL no #print axioms output; Proofs.lean should end with #print axioms lines"
+  echo "FAIL no #print axioms output; the proofs should end with #print axioms lines"
   exit 1
 fi
-extra=$(sed -nE 's/.*depends on axioms: \[(.*)\]/\1/p' <<<"$axioms" | tr ',' '\n' | tr -d ' ' \
+extra=$(sed -nE 's/.*depends on axioms: \[(.*)\].*/\1/p' <<<"$axioms" | tr ',' '\n' | tr -d ' ' \
   | grep -vxE 'propext|Classical\.choice|Quot\.sound' | sort -u || true)
 if [ -n "$extra" ]; then
   echo "$axioms"

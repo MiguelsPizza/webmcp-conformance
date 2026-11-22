@@ -1,6 +1,6 @@
 name: Spec update
 
-# Checks the WebMCP spec for changes to index.bs since the commit the model was built from, has
+# Checks the WebMCP spec for changes to index.bs since the commit in spec/anchors.json, has
 # Claude update the model to match, re-records the corpus, runs the same gate as the Check
 # workflow, and opens a pull request for review. Nothing is pushed to main.
 #
@@ -52,7 +52,7 @@ jobs:
         id: spec
         run: |
           set -euo pipefail
-          base=$(node -e 'const fs=require("fs");const f=fs.readdirSync("corpus").filter(n=>/^spec-.*\.json$/.test(n));if(f.length!==1)throw new Error("expected one corpus");console.log(JSON.parse(fs.readFileSync("corpus/"+f[0])).spec)')
+          base=$(node -p 'require("./spec/anchors.json").spec')
           git clone --quiet --filter=blob:none "https://github.com/$SPEC_REPO.git" "$RUNNER_TEMP/spec-repo"
           cd "$RUNNER_TEMP/spec-repo"
           git fetch --quiet origin "$SPEC_REF"
@@ -82,7 +82,10 @@ jobs:
           else
             git show "$target:index.bs" > "$dir/index.bs"
           fi
-          cat "$dir/range.txt" "$dir/log.txt"
+          cd "$GITHUB_WORKSPACE"
+          # Which of the spec passages the model transcribes changed (informational for Claude).
+          node tools/check-spec.cjs "$dir/index.bs" > "$dir/anchors.txt" || true
+          cat "$dir/range.txt" "$dir/log.txt" "$dir/anchors.txt"
 
       - name: Skip if a pull request already covers it
         id: pr
@@ -162,9 +165,16 @@ jobs:
           set -uo pipefail
           # Keep automation files as they are on main, whatever the model update touched.
           git checkout -- .github && git clean -fdq -- .github
+          spec="$RUNNER_TEMP/spec/index.bs"
+          target="${{ steps.spec.outputs.target }}"
           {
-            echo "corpus: $(.github/spec-update/record-corpus.sh "${{ steps.spec.outputs.target }}" 2>&1)"
-            .github/spec-update/check.sh 2>&1
+            # Record the new commit and passage hashes, then confirm every passage is found and cited.
+            node tools/check-spec.cjs "$spec" --update "$target" >/dev/null
+            anchors=$(node tools/check-spec.cjs "$spec" 2>&1); a=$?
+            echo "$anchors" | sed 's/^/spec anchors: /'
+            echo "corpus: $(.github/spec-update/record-corpus.sh "$target" 2>&1)"
+            .github/spec-update/check.sh 2>&1; c=$?
+            [ "$a" -eq 0 ] && [ "$c" -eq 0 ]
           } | tee "$RUNNER_TEMP/gate.txt"
           echo "ok=$([ "${PIPESTATUS[0]}" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
