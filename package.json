@@ -1,0 +1,10 @@
+{
+  "name": "webmcp-conformance",
+  "private": true,
+  "scripts": {
+    "replay": "node harness/run.cjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

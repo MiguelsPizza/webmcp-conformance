@@ -1,7 +1,9 @@
 // Differential conformance test: random API-call traces run against a WebMCP implementation,
 // compared op by op with what the Lean model (the oracle) says the spec requires.
 //
-//   node harness/run.cjs <target> [traces=300] [seed=1]
+//   node harness/run.cjs <target> [traces=300] [seed=1]     live: generate, ask the Lean oracle
+//   node harness/run.cjs <target> --replay <corpus.json>      replay a recorded corpus, no Lean needed
+//   node harness/run.cjs --record <corpus.json> [traces] [seed]  record traces + expected outcomes
 //
 // <target> is one of:
 //   polyfill:<path to dist/polyfill.js>   the polyfill, injected into stock Chromium
@@ -13,7 +15,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
 
-const [target, countArg = "300", seedArg = "1"] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const recordPath = argv[0] === "--record" ? argv[1] : null;
+const replayPath = argv[1] === "--replay" ? argv[2] : null;
+const target = recordPath ? "none" : argv[0];
+const [countArg = "300", seedArg = "1"] = recordPath ? argv.slice(2) : replayPath ? [] : argv.slice(1);
 const [kind, ...rest] = target.split(":");
 const targetArg = rest.join(":");
 const polyfill = kind === "polyfill" ? fs.readFileSync(targetArg, "utf8") : "";
@@ -88,11 +94,28 @@ function resolveExecutes(ops, outcomes) {
 }
 
 // --- oracle ----------------------------------------------------------------------------
-const oracle = spawn(oraclePath, [], { stdio: ["pipe", "pipe", "inherit"] });
-const oracleLines = readline.createInterface({ input: oracle.stdout });
+// Not started when replaying, so a recorded corpus runs without a Lean toolchain.
+const oracle = replayPath ? null : spawn(oraclePath, [], { stdio: ["pipe", "pipe", "inherit"] });
 const waiting = [];
-oracleLines.on("line", (l) => waiting.shift()(JSON.parse(l)));
+if (oracle) readline.createInterface({ input: oracle.stdout }).on("line", (l) => waiting.shift()(JSON.parse(l)));
 const ask = (ops) => new Promise((res) => { waiting.push(res); oracle.stdin.write(JSON.stringify(ops) + "\n"); });
+
+// Random traces with their ops resolved against the oracle's getTools() answers.
+async function generate(count, seed) {
+  const r = rng(seed);
+  const traces = [];
+  for (let t = 0; t < count; t++) {
+    const raw = genTrace(r);
+    // First pass fixes which getTools() calls exist; the oracle then sizes them.
+    const firstPass = await ask(raw.filter((o) => o.op !== "execute"));
+    const sizedOutcomes = [];
+    let k = 0;
+    for (const o of raw) sizedOutcomes.push(o.op === "execute" ? null : firstPass[k++]);
+    const ops = resolveExecutes(raw, sizedOutcomes);
+    traces.push({ ops, want: await ask(ops) });
+  }
+  return traces;
+}
 
 // --- the implementation, in the page -------------------------------------------------------------
 async function runInPage(page, ops) {
@@ -169,38 +192,49 @@ async function shrink(page, ops, key) {
   return cur;
 }
 
+function printMismatch(key, ops, want, got, label) {
+  console.log(`\nMISMATCH ${key}\n  ${label}:`);
+  ops.forEach((o, i) => console.log(`   ${JSON.stringify(o)}\n      spec: ${want[i]}   impl: ${got[i]}`));
+}
+
 (async () => {
+  if (recordPath) {
+    const traces = await generate(Number(countArg), Number(seedArg));
+    fs.writeFileSync(recordPath, JSON.stringify({ spec: "14b6d53", seed: Number(seedArg), traces }) + "\n");
+    console.log(`recorded ${traces.length} traces to ${recordPath}`);
+    oracle.stdin.end();
+    return;
+  }
   const browser = await chromium.launch(launchOptions);
   console.log(`target ${target}, browser ${browser.version()}`);
   const page = await browser.newPage();
   await page.route("https://webmcp.test/", (route) =>
     route.fulfill({ contentType: "text/html", body: `<!doctype html>${polyfill ? `<script>${polyfill}</script>` : ""}` }));
-  const r = rng(Number(seedArg));
+  const traces = replayPath
+    ? JSON.parse(fs.readFileSync(replayPath, "utf8")).traces
+    : await generate(Number(countArg), Number(seedArg));
+  // Per mismatch category: the shrunk trace (live) or the shortest failing trace (replay).
   const failures = new Map();
   let opsRun = 0;
-  for (let t = 0; t < Number(countArg); t++) {
-    const raw = genTrace(r);
-    // First pass fixes which getTools() calls exist; the oracle then sizes them.
-    const firstPass = await ask(resolveExecutes(raw, null).filter((o) => o.op !== "execute"));
-    const sizedOutcomes = [];
-    let k = 0;
-    for (const o of raw) sizedOutcomes.push(o.op === "execute" ? null : firstPass[k++]);
-    const ops = resolveExecutes(raw, sizedOutcomes);
-    const want = await ask(ops);
+  for (const { ops, want } of traces) {
     const got = await runInPage(page, ops);
     opsRun += ops.length;
     const key = mismatchKey(ops, want, got);
-    if (key && !failures.has(key)) failures.set(key, await shrink(page, ops, key));
+    if (!key) continue;
+    if (replayPath) {
+      const prev = failures.get(key);
+      if (!prev || ops.length < prev.ops.length) failures.set(key, { ops, want, got });
+    } else if (!failures.has(key)) {
+      const small = await shrink(page, ops, key);
+      failures.set(key, { ops: small, want: await ask(small), got: await runInPage(page, small) });
+    }
   }
-  console.log(`${countArg} traces, ${opsRun} operations`);
+  console.log(`${traces.length} traces, ${opsRun} operations`);
   if (!failures.size) console.log("implementation agrees with the model on every operation");
-  for (const [key, ops] of failures) {
-    const want = await ask(ops);
-    const got = await runInPage(page, ops);
-    console.log(`\nMISMATCH ${key}\n  minimal trace:`);
-    ops.forEach((o, i) => console.log(`   ${JSON.stringify(o)}\n      spec: ${want[i]}   impl: ${got[i]}`));
+  for (const [key, f] of failures) {
+    printMismatch(key, f.ops, f.want, f.got, replayPath ? "shortest failing trace" : "minimal trace");
   }
   await browser.close();
-  oracle.stdin.end();
+  oracle?.stdin.end();
   process.exitCode = failures.size ? 1 : 0;
 })();

@@ -32,14 +32,26 @@ The proofs use only Lean's standard axioms (`#print axioms` at the end of the fi
 
 ## Running it
 
-Needs Lean 4.25.0 and Node with Playwright.
+Every implementation can be checked without Lean, against the recorded corpus:
 
 ```
-lake build                                         # checks the proofs, builds the oracle
+npm install                                                     # Playwright only
+node harness/run.cjs <target> --replay corpus/spec-14b6d53.json
+```
+
+`corpus/spec-14b6d53.json` holds 1,000 random call sequences with the outcomes the model says the spec requires. `<target>` is one of:
+
+- `polyfill:<path to dist/polyfill.js>`: the polyfill, injected into Playwright's Chromium
+- `chromium`: Chromium's native WebMCP, behind `--enable-blink-features=WebMCP`
+- `chromium:<path to a chrome binary>`: the same for another build, such as Canary
+
+With Lean 4.25.0 you can also check the proofs, generate fresh sequences, and shrink any disagreement to a minimal repro:
+
+```
+lake build                                          # checks the proofs, builds the oracle
 node harness/run.cjs <target> [traces=300] [seed=1]
+node harness/run.cjs --record <corpus.json> [traces] [seed]
 ```
-
-`<target>` is `polyfill:<path to dist/polyfill.js>`, `chromium` (native WebMCP behind `--enable-blink-features=WebMCP`), or `chromium:<path to a chrome binary>` for another build such as Canary.
 
 ## Keeping it current
 
