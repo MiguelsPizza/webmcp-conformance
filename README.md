@@ -86,7 +86,7 @@ Every implementation can be checked without Lean, against the recorded corpus:
 ```
 npm install                                                     # Playwright only
 npx playwright install chromium                                 # its bundled Chromium
-node harness/run.cjs <target> --replay corpus/spec-14b6d53.json
+node harness/run.cjs <target> --replay corpus/spec-a9d7580.json
 ```
 
 `<target>` is one of:
