@@ -149,7 +149,7 @@ jobs:
             --add-dir "$SPEC_DIR" "$OUT_DIR" \
             --tools Read Edit Write Glob Grep Bash \
             --allowedTools Read Edit Write Glob Grep \
-              "Bash(lake build:*)" "Bash(lake env:*)" "Bash(.github/spec-update/check.sh)" \
+              "Bash(lake build:*)" "Bash(lake test:*)" "Bash(node tools/check-spec.cjs:*)" "Bash(node tools/refresh-repros.cjs:*)" "Bash(lake env:*)" "Bash(.github/spec-update/check.sh)" \
               "Bash(node harness/run.cjs:*)" "Bash(echo:*)" "Bash(cat:*)" \
             --disallowedTools "Bash(git:*)" "Bash(gh:*)" "Bash(curl:*)" WebFetch WebSearch \
             --settings '{"attribution":false,"includeGitInstructions":false}' \
