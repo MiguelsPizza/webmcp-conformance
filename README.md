@@ -13,7 +13,7 @@ The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a smal
 | [`WebMCP/Model.lean`](WebMCP/Model.lean) | The model. Each definition cites the spec algorithm it transcribes (`Spec: #anchor`), and the file lists every simplification it makes. |
 | [`WebMCP/Proofs.lean`](WebMCP/Proofs.lean) | Proofs about the model. The build fails if any of them rests on `sorry`. |
 | [`WebMCP/Examples.lean`](WebMCP/Examples.lean) | Hand-written traces with the outcomes the spec requires, including the spec's own examples, checked at build time. |
-| [`Main.lean`](Main.lean) | The oracle: JSON traces in, the spec's outcomes out. |
+| [`WebMCP/Oracle.lean`](WebMCP/Oracle.lean), [`Main.lean`](Main.lean) | The oracle: JSON traces in, the spec's outcomes out. `Oracle.lean` has the wire format, `Main.lean` the loop over stdin. |
 | [`harness/run.cjs`](harness/run.cjs) | Generates traces, runs them in a browser, compares, shrinks. |
 | [`corpus/`](corpus) | 1,000 recorded traces with expected outcomes, for running without Lean. |
 | [`spec/anchors.json`](spec/anchors.json), [`tools/check-spec.cjs`](tools/check-spec.cjs) | The spec commit the model reflects, and a hash of each part of `index.bs` it transcribes. |

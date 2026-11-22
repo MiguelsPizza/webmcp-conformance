@@ -12,7 +12,8 @@ A person will review your change against the spec diff before it merges, so make
 - `WebMCP/Proofs.lean`: machine-checked invariants of the model. It ends with
   `#guard_msgs in #print axioms` lines pinning each theorem to Lean's three standard axioms.
 - `WebMCP/Examples.lean`: worked examples checked at build time.
-- `Main.lean`: the oracle executable; parses JSON operations and prints the model's outcomes.
+- `WebMCP/Oracle.lean`: the oracle's JSON wire format; `Main.lean` runs it over stdin and prints
+  the model's outcomes.
 - `harness/run.cjs`: generates random call sequences, asks the oracle, and runs them in browsers.
 - `corpus/spec-*.json`: recorded sequences and expected outcomes. Do not edit it; after you
   finish, the workflow re-records it from your model as `corpus/spec-<new commit>.json`, with the
@@ -40,7 +41,7 @@ A person will review your change against the spec diff before it merges, so make
    one) to the new short commit. If the change adds a passage the model now transcribes, add it to
    `spec/anchors.json` (any hash; the workflow recomputes it) and cite it as `Spec: #<anchor>`.
 4. If the model gains an operation, outcome, or input the harness has to generate or run, extend
-   `Main.lean` and `harness/run.cjs` to match, keeping their existing style.
+   `WebMCP/Oracle.lean` and `harness/run.cjs` to match, keeping their existing style.
 5. Run `lake build --wfail WebMCP oracle`. It must pass with no warnings, and the build lints
    for missing docstrings, so every new definition needs one. If you add a theorem, pin its
    axioms the same way as the others.
