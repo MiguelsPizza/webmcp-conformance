@@ -16,6 +16,7 @@ The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a smal
 | [`WebMCP/Oracle.lean`](WebMCP/Oracle.lean), [`Main.lean`](Main.lean) | The oracle: JSON traces in, the spec's outcomes out. `Oracle.lean` has the wire format, `Main.lean` the loop over stdin. |
 | [`harness/run.cjs`](harness/run.cjs) | Generates traces, runs them in a browser, compares, shrinks. |
 | [`corpus/`](corpus) | 1,000 recorded traces with expected outcomes, for running without Lean. |
+| [`wpt/`](wpt/README.md), [`tools/wpt-score.cjs`](tools/wpt-score.cjs) | The model scored against the official web-platform-tests for WebMCP: each in-scope subtest translated to a trace. |
 | [`spec/anchors.json`](spec/anchors.json), [`tools/check-spec.cjs`](tools/check-spec.cjs) | The spec commit the model reflects, and a hash of each part of `index.bs` it transcribes. |
 
 ## Reading the Lean

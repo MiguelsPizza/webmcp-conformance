@@ -1,0 +1,2015 @@
+{
+  "about": "Hand translation of the web-platform-tests webmcp/ subtests into traces for the Lean model's oracle (Main.lean). Scored by tools/wpt-score.cjs; method and caveats in wpt/README.md.",
+  "wpt": {
+    "repo": "https://github.com/web-platform-tests/wpt",
+    "commit": "e00a7b14e8e3d9c04933e29ed247baf76c60706e",
+    "date": "2026-11-22"
+  },
+  "spec": {"repo":"https://github.com/webmachinelearning/webmcp","commit":"14b6d53"},
+  "format": {
+    "trace": "ops exactly as the oracle reads them; `setup` (if present) reproduces state left by earlier subtests in the same file and is run first, its outcomes unchecked",
+    "checks": "`at` indexes the trace (not setup); `want` is what the WPT assertion requires: {outcome} exact oracle outcome string, {names} tool names in order, {count}, or {tool, field} with {equals}|{isNull}|{notNull}|{json}|{path, equals}",
+    "setup": "a check with `setup: true` is incidental (an awaited call the test needs to succeed) and does not by itself make a subtest count as expressible",
+    "proxy": "the model value substituted for a WPT value it cannot express, and why the substitution reaches the same spec steps",
+    "extra": "a second trace for the same subtest, when one tool cannot show two things at once",
+    "expectDisagree": "the recorded classification of a check known to disagree; the scorer flags any disagreement without one, and any classified check that now agrees"
+  },
+  "subtests": [
+    {
+      "file": "webmcp/declarative/adopt-form-from-removed-iframe.https.html",
+      "subtest": "A form adopted from a removed iframe registers its tool in its new document",
+      "lines": [59,68],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/adopt-form-from-removed-iframe.https.html",
+      "subtest": "Mutating a form adopted from a removed iframe registers its tool in its new document",
+      "lines": [70,91],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/adopt-form-from-removed-iframe.https.html",
+      "subtest": "Removing a form adopted from a removed iframe leaves no tool behind",
+      "lines": [93,103],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/duplicate-tool-name.https.html",
+      "subtest": "Test that duplicate declarative tools with different descriptions do not crash and only the first is registered",
+      "lines": [10,51],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/duplicate-tool-name.https.html",
+      "subtest": "Test that duplicate declarative tools with identical descriptions do not crash and only the first is registered",
+      "lines": [53,94],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/duplicate-tool-name.https.html",
+      "subtest": "Test that removing a rejected duplicate declarative tool does not unregister the registered tool sharing its name",
+      "lines": [96,125],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/duplicate-tool-name.https.html",
+      "subtest": "Test that a rejected duplicate declarative tool is registered upon a later mutation, once its name is free",
+      "lines": [127,157],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-abort.https.html",
+      "subtest": "executeTool signal successfully resets tool pseudo-classes",
+      "lines": [16,104],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-detach-toolactivated.https.html",
+      "subtest": "toolactivated is not dispatched when filling out a declarative tool form detaches the tool document",
+      "lines": [11,44],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-flexible-types.https.html",
+      "subtest": "Declarative form tool coerces flexible input types appropriately",
+      "lines": [22,63],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-invalid-input.https.html",
+      "subtest": "executeTool rejects when input contains a parameter that does not exist in the form",
+      "lines": [32,42],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-invalid-input.https.html",
+      "subtest": "executeTool rejects when input contains an invalid value for select element",
+      "lines": [44,54],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-invalid-input.https.html",
+      "subtest": "executeTool rejects when form input violates pattern constraint",
+      "lines": [56,66],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-invalid-input.https.html",
+      "subtest": "executeTool rejects when form inputs violate required and min constraints",
+      "lines": [68,78],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-navigation.https.html",
+      "subtest": "executeTool resolves with null and triggers standard form navigation",
+      "lines": [15,27],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-no-autosubmit.https.html",
+      "subtest": "executeTool without toolautosubmit focuses submit button and waits for manual submit",
+      "lines": [28,58],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-no-autosubmit.https.html",
+      "subtest": "form.reset() cancels pending executeTool execution and clears :tool-form-active",
+      "lines": [60,85],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-no-autosubmit.https.html",
+      "subtest": "Unrelated form submission and removal cancels pending tool execution",
+      "lines": [87,115],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-pseudo-classes.https.html",
+      "subtest": "Pseudo-classes :tool-form-active and :tool-submit-active apply correctly during execution and are removed upon completion",
+      "lines": [26,64],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-pseudo-classes.https.html",
+      "subtest": "Form controls are populated with arguments when toolactivated event fires",
+      "lines": [66,95],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith-circular-object.https.html",
+      "subtest": "Declarative tool executeTool() rejects when respondWith() receives a circular object",
+      "lines": [12,33],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith-reject.https.html",
+      "subtest": "executeTool rejects when respondWith() promise is rejected",
+      "lines": [16,35],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith-unserializable.https.html",
+      "subtest": "Declarative tool executeTool() rejects when respondWith() receives a Symbol",
+      "lines": [41,51],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith-unserializable.https.html",
+      "subtest": "Declarative tool executeTool() rejects when respondWith() receives an object with a BigInt property",
+      "lines": [41,51],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith-unserializable.https.html",
+      "subtest": "Declarative tool executeTool() rejects when respondWith() receives an object whose toJSON() throws",
+      "lines": [41,51],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith-unserializable.https.html",
+      "subtest": "Declarative tool executeTool() rejects when respondWith() receives an object with a throwing getter",
+      "lines": [41,51],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith.https.html",
+      "subtest": "executeTool resolves with respondWith() value when preventDefault() is called",
+      "lines": [44,64],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith.https.html",
+      "subtest": "executeTool rejects when preventDefault() is called without respondWith()",
+      "lines": [66,79],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith.https.html",
+      "subtest": "respondWith() throws InvalidStateError if preventDefault() was not called, and form navigates",
+      "lines": [81,103],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith.https.html",
+      "subtest": "respondWith() throws InvalidStateError and agentInvoked is false when submit is not agent-invoked",
+      "lines": [105,125],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith.https.html",
+      "subtest": "Calling respondWith() after submit event dispatch throws InvalidStateError",
+      "lines": [127,144],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/executeTool-respondWith.https.html",
+      "subtest": "executeTool resolves successfully with respondWith() value even if a navigation is initiated",
+      "lines": [146,163],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/execute_tool_change_event.https.html",
+      "subtest": "executeTool triggers input and change events",
+      "lines": [24,75],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/execute_tool_submit_from_js.https.html",
+      "subtest": "executeTool resolves successfully when submit handler calls form.submit()",
+      "lines": [13,30],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/form_removal_submit_crash.https.html",
+      "subtest": "Form removal on submit with respondWith does not crash the renderer",
+      "lines": [14,43],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/getTools-declarative-schema.https.html",
+      "subtest": "WebMCP: getTools() retrieves declarative schema at registration time",
+      "lines": [17,42],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/name-collision-with-imperative-tool.https.html",
+      "subtest": "Removing a rejected declarative form does not unregister the imperative tool sharing its name",
+      "lines": [58,80],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/name-collision-with-imperative-tool.https.html",
+      "subtest": "Renaming a rejected declarative form does not unregister the imperative tool sharing its old name",
+      "lines": [82,100],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/no-frame-documents.https.html",
+      "subtest": "Declarative tool in document without active frame is not registered",
+      "lines": [9,18],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/no-frame-documents.https.html",
+      "subtest": "Declarative tool in DOMParser document is not registered",
+      "lines": [20,28],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/no-frame-documents.https.html",
+      "subtest": "Declarative tool with name only in document without active frame is not registered",
+      "lines": [30,38],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/no-frame-documents.https.html",
+      "subtest": "Declarative tool in iframe removed after registration does not crash on attribute modification",
+      "lines": [40,52],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/no-frame-documents.https.html",
+      "subtest": "adoptNode transfers a frameless form into an active document and registers a working tool",
+      "lines": [55,76],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/no-frame-documents.https.html",
+      "subtest": "cloneNode transfers a frameless form into an active document and registers a working tool",
+      "lines": [55,76],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/no-frame-documents.https.html",
+      "subtest": "importNode transfers a frameless form into an active document and registers a working tool",
+      "lines": [55,76],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/opaque-origin-tools.https.html",
+      "subtest": "An opaque origin document can register and execute its own declarative tools",
+      "lines": [18,36],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/sandboxed-iframe.https.html",
+      "subtest": "Declarative tool in sandboxed iframe without allow-scripts is not registered",
+      "lines": [10,40],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/select-multiple-events.https.html",
+      "subtest": "executeTool() on a <select multiple> dispatches input and change events",
+      "lines": [25,57],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/toolchange-on-attribute-mutation.https.html",
+      "subtest": "Test that mutating or removing form attributes (toolname, tooldescription, tooltitle, toolautosubmit) fires toolchange and updates getTools() correctly",
+      "lines": [21,127],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/toolchange-on-attribute-mutation.https.html",
+      "subtest": "No toolchange event on unrelated attribute mutation",
+      "lines": [129,149],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/toolchange-on-attribute-mutation.https.html",
+      "subtest": "No toolchange event on redundant schema mutation",
+      "lines": [151,172],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/toolchange-on-control-add-remove.https.html",
+      "subtest": "Test that toolchange event fires when controls are added or removed",
+      "lines": [16,34],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/toolchange-on-name-change.https.html",
+      "subtest": "Test that toolchange event fires on various mutations of form controls",
+      "lines": [24,60],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/unregister-during-executeTool.https.html",
+      "subtest": "Pending executeTool() Promise resolves successfully when target declarative tool is unregistered via DOM removal",
+      "lines": [10,52],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/unregister-during-executeTool.https.html",
+      "subtest": "Pending executeTool() Promise resolves successfully when target declarative tool is unregistered via attribute removal",
+      "lines": [54,95],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/unregister-during-executeTool.https.html",
+      "subtest": "Pre-submission DOM removal of declarative tool cancels pending executeTool() and fires toolcancel",
+      "lines": [104,149],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/unregister-during-executeTool.https.html",
+      "subtest": "Pre-submission attribute removal of declarative tool cancels pending executeTool() and fires toolcancel",
+      "lines": [151,196],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/declarative/unregister-during-executeTool.https.html",
+      "subtest": "Target frame detachment during pending declarative executeTool() rejects caller promise",
+      "lines": [198,239],
+      "scope": "out",
+      "reason": "declarative API (form-based tools), which the spec text at 14b6d53 does not define"
+    },
+    {
+      "file": "webmcp/idlharness.https.window.js",
+      "subtest": "(idl_test: generated IDL subtests)",
+      "lines": [8,12],
+      "scope": "out",
+      "reason": "IDL shape (interfaces, members, [SecureContext]); the model has no IDL surface"
+    },
+    {
+      "file": "webmcp/imperative/abort-signal-after-iframe-removal-crash.https.html",
+      "subtest": "(crash test: no subtests; passes if the page finishes without crashing)",
+      "lines": null,
+      "scope": "out",
+      "reason": "crash test with iframe removal / navigation / re-entrancy"
+    },
+    {
+      "file": "webmcp/imperative/cancel-reentrancy-crash.https.html",
+      "subtest": "(crash test: no subtests; passes if the page finishes without crashing)",
+      "lines": null,
+      "scope": "out",
+      "reason": "crash test with iframe removal / navigation / re-entrancy"
+    },
+    {
+      "file": "webmcp/imperative/detached-frame-executeTool.https.html",
+      "subtest": "executeTool() throws `InvalidStateError` in detached frame",
+      "lines": [11,44],
+      "scope": "out",
+      "reason": "detached document (fully-active checks); the model's document is always fully active"
+    },
+    {
+      "file": "webmcp/imperative/detached-frame-getTools.https.html",
+      "subtest": "getTools() throws `InvalidStateError` in detached frame",
+      "lines": [10,23],
+      "scope": "out",
+      "reason": "detached document (fully-active checks)"
+    },
+    {
+      "file": "webmcp/imperative/detached-frame-modelContext.https.html",
+      "subtest": "document.modelContext in detached frame",
+      "lines": [10,25],
+      "scope": "out",
+      "reason": "detached document (fully-active checks)"
+    },
+    {
+      "file": "webmcp/imperative/detached-frame-registerTool.https.html",
+      "subtest": "registerTool() rejects `InvalidStateError` in detached frame",
+      "lines": [10,28],
+      "scope": "out",
+      "reason": "detached document (fully-active checks)"
+    },
+    {
+      "file": "webmcp/imperative/detached-frame-waitForToolsUntil.https.html",
+      "subtest": "waitForToolsUntil() throws `InvalidStateError` in detached frame",
+      "lines": [10,25],
+      "scope": "out",
+      "reason": "non-modelled API waitForToolsUntil() (not in the spec IDL at 14b6d53), detached document"
+    },
+    {
+      "file": "webmcp/imperative/duplicate_tool_registration.https.html",
+      "subtest": "duplicate tool registration is invalid.",
+      "lines": [11,30],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"empty","title":null,"description":"echo empty","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"empty","title":null,"description":"echo empty","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null}
+      ],
+      "checks": [
+        {"at":0,"line":16,"assert":"await registerTool(empty) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":22,"assert":"second registerTool(empty) rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/executeTool-abort.https.html",
+      "subtest": "executeTool() provides a non-aborted default AbortSignal when called without options",
+      "lines": [12,31],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"default_signal_tool","title":null,"description":"Test default signal","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":17,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":28,"assert":"executeTool(tool) resolves with 'success'","want":{"outcome":"result:hi"},"proxy":"the tool returns the string 'success' -> model `returnText` ('hi')","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}}
+      ],
+      "notExpressible": [
+        {"line":"29-30","assert":"options.signal is a non-aborted AbortSignal","why":"the execution signal is out of the model's scope"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/executeTool-abort.https.html",
+      "subtest": "caller abort propagates to tool callback options.signal",
+      "lines": [33,122],
+      "scope": "out",
+      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-abort.https.html",
+      "subtest": "executeTool() with already-aborted tool synchronously rejects",
+      "lines": [124,145],
+      "scope": "out",
+      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-abort.https.html",
+      "subtest": "executeTool() promise remains rejected even if tool callback resolves after abort",
+      "lines": [147,180],
+      "scope": "out",
+      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-abort.https.html",
+      "subtest": "concurrent executions of the same tool have independent AbortSignals",
+      "lines": [182,233],
+      "scope": "out",
+      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-abort.https.html",
+      "subtest": "tool synchronously self-cancelling via caller AbortSignal aborts options.signal and fires toolcancel",
+      "lines": [235,259],
+      "scope": "out",
+      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-abort.https.html",
+      "subtest": "tool asynchronously self-cancelling via caller AbortSignal aborts options.signal and fires toolcancel",
+      "lines": [261,286],
+      "scope": "out",
+      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-across-trees.https.html",
+      "subtest": "executeTool() rejects when the tool is hosted in another frame tree",
+      "lines": [11,35],
+      "scope": "out",
+      "reason": "multiple frame trees (window.open)"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-caller-navigate-abort.https.html",
+      "subtest": "executeTool() aborts target signal and fires toolcancel when the invoker document (same-origin) navigates away",
+      "lines": [28,90],
+      "scope": "out",
+      "reason": "navigation/detach of the caller, execution signal, toolcancel"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-caller-navigate-abort.https.html",
+      "subtest": "executeTool() aborts target signal and fires toolcancel when the invoker document (cross-origin) navigates away",
+      "lines": [28,90],
+      "scope": "out",
+      "reason": "navigation/detach of the caller, execution signal, toolcancel"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-caller-navigate-abort.https.html",
+      "subtest": "executeTool() aborts target signal and fires toolcancel when the invoker frame (same-origin) is detached from the DOM",
+      "lines": [92,135],
+      "scope": "out",
+      "reason": "navigation/detach of the caller, execution signal, toolcancel"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-caller-navigate-abort.https.html",
+      "subtest": "executeTool() aborts target signal and fires toolcancel when the invoker frame (cross-origin) is detached from the DOM",
+      "lines": [92,135],
+      "scope": "out",
+      "reason": "navigation/detach of the caller, execution signal, toolcancel"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-detach-toolactivated.https.html",
+      "subtest": "toolactivated is not dispatched when a tool execute callback from another realm detaches the tool document",
+      "lines": [20,51],
+      "scope": "out",
+      "reason": "events, detach during execution, iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-detach-toolactivated.https.html",
+      "subtest": "toolactivated is not dispatched when a tool execute callback detaches its own document",
+      "lines": [53,87],
+      "scope": "out",
+      "reason": "events, detach during execution, iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-detach-toolcancel.https.html",
+      "subtest": "toolcancel is not dispatched when a tool abort handler from another realm detaches the tool document",
+      "lines": [20,55],
+      "scope": "out",
+      "reason": "events, detach during cancellation, iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-detach-toolcancel.https.html",
+      "subtest": "toolcancel is not dispatched when a tool abort handler detaches its own document",
+      "lines": [57,98],
+      "scope": "out",
+      "reason": "events, detach during cancellation, iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-error-window-onerror.https.html",
+      "subtest": "Failed tool execution does not trigger window.onerror",
+      "lines": [11,40],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"throwing_tool","title":null,"description":"A tool that throws an error","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"reject","signal":null},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":0,"line":22,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":35,"assert":"executeTool(tool) rejects OperationError","want":{"outcome":"err:OperationError"},"proxy":"an async function that throws returns a rejected promise -> model `reject`"}
+      ],
+      "notExpressible": [
+        {"line":39,"assert":"no window error event fires","why":"error events / console reporting are not modelled"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/executeTool-error-window-onerror.https.html",
+      "subtest": "Tool execution returning circular object rejects and does not trigger window.onerror",
+      "lines": [42,73],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"throwing_tool","title":null,"description":"A tool that throws an error","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"reject","signal":null}
+      ],
+      "setupNote": "tools registered by earlier subtests (never unregistered)",
+      "trace": [
+        {"op":"register","name":"circular_tool","title":null,"description":"A tool that returns a circular object","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":0,"line":53,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":68,"assert":"executeTool(tool) rejects OperationError","want":{"outcome":"err:OperationError"}}
+      ],
+      "notExpressible": [
+        {"line":72,"assert":"no window error event fires","why":"error events / console reporting are not modelled"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/executeTool-error-window-onerror.https.html",
+      "subtest": "Tool execution returning a Symbol rejects and does not trigger window.onerror",
+      "lines": [101,126],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"throwing_tool","title":null,"description":"A tool that throws an error","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"reject","signal":null},
+        {"op":"register","name":"circular_tool","title":null,"description":"A tool that returns a circular object","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null}
+      ],
+      "setupNote": "tools registered by earlier subtests (never unregistered)",
+      "trace": [
+        {"op":"register","name":"symbol_tool","title":null,"description":"A tool that returns a Symbol","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnUndefined","signal":null},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":1,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":0,"line":111,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":121,"assert":"executeTool(tool) rejects OperationError","want":{"outcome":"err:OperationError"},"proxy":"the tool returns Symbol('result') -> model `returnUndefined`: JSON.stringify yields undefined for both, so 'serializing a JavaScript value to a JSON string' throws TypeError and the spec reports 'unserializable result'"}
+      ],
+      "notExpressible": [
+        {"line":125,"assert":"no window error event fires","why":"error events / console reporting are not modelled"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/executeTool-error-window-onerror.https.html",
+      "subtest": "Tool execution returning an object with a BigInt property rejects and does not trigger window.onerror",
+      "lines": [101,126],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"throwing_tool","title":null,"description":"A tool that throws an error","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"reject","signal":null},
+        {"op":"register","name":"circular_tool","title":null,"description":"A tool that returns a circular object","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null},
+        {"op":"register","name":"symbol_tool","title":null,"description":"A tool that returns a Symbol","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnUndefined","signal":null}
+      ],
+      "setupNote": "tools registered by earlier subtests (never unregistered)",
+      "trace": [
+        {"op":"register","name":"bigint_property_tool","title":null,"description":"A tool that returns an object with a BigInt property","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":0,"line":111,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":121,"assert":"executeTool(tool) rejects OperationError","want":{"outcome":"err:OperationError"},"proxy":"the tool returns {value: 1n} -> model `returnCyclic`: JSON.stringify throws for both"}
+      ],
+      "notExpressible": [
+        {"line":125,"assert":"no window error event fires","why":"error events / console reporting are not modelled"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/executeTool-error-window-onerror.https.html",
+      "subtest": "Tool execution returning an object whose toJSON() throws rejects and does not trigger window.onerror",
+      "lines": [101,126],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"throwing_tool","title":null,"description":"A tool that throws an error","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"reject","signal":null},
+        {"op":"register","name":"circular_tool","title":null,"description":"A tool that returns a circular object","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null},
+        {"op":"register","name":"symbol_tool","title":null,"description":"A tool that returns a Symbol","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnUndefined","signal":null},
+        {"op":"register","name":"bigint_property_tool","title":null,"description":"A tool that returns an object with a BigInt property","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null}
+      ],
+      "setupNote": "tools registered by earlier subtests (never unregistered)",
+      "trace": [
+        {"op":"register","name":"throwing_tojson_tool","title":null,"description":"A tool that returns an object whose toJSON() throws","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":3,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":0,"line":111,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":121,"assert":"executeTool(tool) rejects OperationError","want":{"outcome":"err:OperationError"},"proxy":"the tool returns an object whose toJSON() throws -> model `returnCyclic`: JSON.stringify throws for both"}
+      ],
+      "notExpressible": [
+        {"line":125,"assert":"no window error event fires","why":"error events / console reporting are not modelled"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/executeTool-error-window-onerror.https.html",
+      "subtest": "Tool execution returning an object with a throwing getter rejects and does not trigger window.onerror",
+      "lines": [101,126],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"throwing_tool","title":null,"description":"A tool that throws an error","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"reject","signal":null},
+        {"op":"register","name":"circular_tool","title":null,"description":"A tool that returns a circular object","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null},
+        {"op":"register","name":"symbol_tool","title":null,"description":"A tool that returns a Symbol","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnUndefined","signal":null},
+        {"op":"register","name":"bigint_property_tool","title":null,"description":"A tool that returns an object with a BigInt property","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null},
+        {"op":"register","name":"throwing_tojson_tool","title":null,"description":"A tool that returns an object whose toJSON() throws","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null}
+      ],
+      "setupNote": "tools registered by earlier subtests (never unregistered)",
+      "trace": [
+        {"op":"register","name":"throwing_getter_tool","title":null,"description":"A tool that returns an object with a throwing getter","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnCyclic","signal":null},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":3,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":0,"line":111,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":121,"assert":"executeTool(tool) rejects OperationError","want":{"outcome":"err:OperationError"},"proxy":"the tool returns an object with a throwing getter -> model `returnCyclic`: JSON.stringify throws for both"}
+      ],
+      "notExpressible": [
+        {"line":125,"assert":"no window error event fires","why":"error events / console reporting are not modelled"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/executeTool-events.https.html",
+      "subtest": "toolactivated and toolcancel events are dispatched on document.modelContext during tool execution and cancellation",
+      "lines": [9,74],
+      "scope": "out",
+      "reason": "events (toolactivated/toolcancel), execution signal, iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-events.https.html",
+      "subtest": "toolactivated is dispatched at the ModelContext of the tool target document",
+      "lines": [76,108],
+      "scope": "out",
+      "reason": "events (toolactivated/toolcancel), execution signal, iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-events.https.html",
+      "subtest": "toolcancel is dispatched at the ModelContext of the tool target document",
+      "lines": [110,152],
+      "scope": "out",
+      "reason": "events (toolactivated/toolcancel), execution signal, iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-invalid-dictionary.https.html",
+      "subtest": "executeTool() rejects with TypeError when passed an object that is not a Tool",
+      "lines": [10,37],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"legit_tool","title":null,"description":"Legitimate tool description","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":11,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":19,"assert":"legit_tool is discovered","want":{"tool":"legit_tool","field":"name","equals":"legit_tool"},"setup":true}
+      ],
+      "notExpressible": [
+        {"line":"31-36","assert":"executeTool(lookalike plain object) rejects TypeError","why":"the model only executes Tool objects that getTools() returned; Web IDL interface conversion of a non-Tool is not modelled"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/executeTool-invalid-dictionary.https.html",
+      "subtest": "executeTool() rejects with TypeError for invalid JSON arguments",
+      "lines": [39,75],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"legit_tool","title":null,"description":"Legitimate tool description","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null}
+      ],
+      "setupNote": "'legit_tool' from the previous subtest",
+      "trace": [
+        {"op":"register","name":"json-test-tool","title":null,"description":"Tool for JSON tests","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"cyclic"},
+        {"op":"execute","call":0,"index":0,"input":"cyclic"}
+      ],
+      "checks": [
+        {"at":0,"line":40,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":48,"assert":"json-test-tool is discovered","want":{"tool":"json-test-tool","field":"name","equals":"json-test-tool"},"setup":true},
+        {"at":2,"line":52,"assert":"executeTool(tool, circular) rejects TypeError","want":{"outcome":"err:TypeError"}},
+        {"at":3,"line":62,"assert":"executeTool(tool, {toJSON: () => undefined}) rejects TypeError","want":{"outcome":"err:TypeError"},"proxy":"input {toJSON: () => undefined} -> model `cyclic` (same serialization step)"}
+      ],
+      "notExpressible": [
+        {"line":69,"assert":"executeTool(tool, BigInt(42)) rejects TypeError","why":"no primitive inputs in the model; this is Web IDL conversion to `object`"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/executeTool-reentrant-cancellation.https.html",
+      "subtest": "caller signal abort cascades through re-entrant executeTool() when outer tool forwards options.signal",
+      "lines": [18,65],
+      "scope": "out",
+      "reason": "execution signal / cancellation, re-entrant execution, iframe detach"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-reentrant-cancellation.https.html",
+      "subtest": "inner tool self-cancelling the outer caller AbortController aborts both nested executions and fires toolcancel",
+      "lines": [67,110],
+      "scope": "out",
+      "reason": "execution signal / cancellation, re-entrant execution, iframe detach"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-reentrant-cancellation.https.html",
+      "subtest": "detaching inner target frame during re-entrant executeTool() rejects inner and outer tool executions",
+      "lines": [112,169],
+      "scope": "out",
+      "reason": "execution signal / cancellation, re-entrant execution, iframe detach"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-same-document-navigation-crash.https.html",
+      "subtest": "(crash test: no subtests; passes if the page finishes without crashing)",
+      "lines": null,
+      "scope": "out",
+      "reason": "crash test with iframe removal / navigation / re-entrancy"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-signal-cross-origin.https.html",
+      "subtest": "caller abort in parent document propagates to options.signal in cross-origin iframe tool",
+      "lines": [15,73],
+      "scope": "out",
+      "reason": "execution signal, cross-origin iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-signal-cross-origin.https.html",
+      "subtest": "caller abort in cross-origin iframe propagates to options.signal in parent document tool",
+      "lines": [75,126],
+      "scope": "out",
+      "reason": "execution signal, cross-origin iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-signal-cross-origin.https.html",
+      "subtest": "other frame aborting an AbortController passed to executeTool() cancels target execution and fires toolcancel",
+      "lines": [128,194],
+      "scope": "out",
+      "reason": "execution signal, cross-origin iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-target-detachment.https.html",
+      "subtest": "executeTool() rejects when target frame is detached before execution",
+      "lines": [14,58],
+      "scope": "out",
+      "reason": "detach of the target frame, execution signal"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-target-detachment.https.html",
+      "subtest": "executeTool() rejects when target frame is detached mid-execution",
+      "lines": [60,107],
+      "scope": "out",
+      "reason": "detach of the target frame, execution signal"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-target-detachment.https.html",
+      "subtest": "executeTool() rejects cleanly when tool callback synchronously detaches its own frame",
+      "lines": [109,144],
+      "scope": "out",
+      "reason": "detach of the target frame, execution signal"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-target-detachment.https.html",
+      "subtest": "executeTool() abort cleanly handles synchronous frame detachment inside options.signal abort listener",
+      "lines": [146,192],
+      "scope": "out",
+      "reason": "detach of the target frame, execution signal"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-target-navigation.https.html",
+      "subtest": "executeTool() rejects when target document navigates away",
+      "lines": [15,48],
+      "scope": "out",
+      "reason": "navigation of the target document, iframes"
+    },
+    {
+      "file": "webmcp/imperative/executeTool-unregister-resolution-race.https.html",
+      "subtest": "executeTool resolves successfully even when tool is unregistered synchronously after its promise resolves",
+      "lines": [11,37],
+      "scope": "out",
+      "reason": "unregistration from inside a running callback (interleaving the model does not express)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-cross-origin-child.https.html",
+      "subtest": "Parent exposes tool to cross-origin child",
+      "lines": [28,82],
+      "scope": "out",
+      "reason": "cross-origin iframes, exposedTo, toolchange events"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-cross-origin-child.https.html",
+      "subtest": "Cross-origin child exposes tool to parent",
+      "lines": [84,127],
+      "scope": "out",
+      "reason": "cross-origin iframes, exposedTo, toolchange events"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-cross-origin-child.https.html",
+      "subtest": "Parent exposes tool to origin that is neither its own nor its iframe's",
+      "lines": [129,159],
+      "scope": "out",
+      "reason": "cross-origin iframes, exposedTo, toolchange events"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-cross-origin-child.https.html",
+      "subtest": "Iframe exposes tool to origin that is neither its own nor its parent's",
+      "lines": [161,194],
+      "scope": "out",
+      "reason": "cross-origin iframes, exposedTo, toolchange events"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-cross-origin-child.https.html",
+      "subtest": "Cross-origin iframe without permissions policy does not receive toolchange event even if exposed to it",
+      "lines": [196,222],
+      "scope": "out",
+      "reason": "cross-origin iframes, exposedTo, toolchange events"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-defaults-cross-origin.https.html",
+      "subtest": "Parent tool with no exposedTo array is not visible to cross-origin iframe",
+      "lines": [28,56],
+      "scope": "out",
+      "reason": "cross-origin iframes, exposedTo defaults"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-defaults-cross-origin.https.html",
+      "subtest": "Parent tool with empty exposedTo array is not visible to cross-origin iframe",
+      "lines": [58,85],
+      "scope": "out",
+      "reason": "cross-origin iframes, exposedTo defaults"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-defaults-cross-origin.https.html",
+      "subtest": "Cross-origin iframe tool with default exposure is not visible to parent",
+      "lines": [87,117],
+      "scope": "out",
+      "reason": "cross-origin iframes, exposedTo defaults"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-defaults-cross-origin.https.html",
+      "subtest": "Cross-origin iframe tool with empty exposedTo array is not visible to parent",
+      "lines": [119,150],
+      "scope": "out",
+      "reason": "cross-origin iframes, exposedTo defaults"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-defaults-same-origin.https.html",
+      "subtest": "Parent tool with missing `exposedTo` array is visible to same-origin iframe",
+      "lines": [23,73],
+      "scope": "out",
+      "reason": "iframes (multi-document), exposedTo defaults"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-defaults-same-origin.https.html",
+      "subtest": "Parent tool with empty `exposedTo` array is visible to same-origin iframe",
+      "lines": [75,122],
+      "scope": "out",
+      "reason": "iframes (multi-document), exposedTo defaults"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-defaults-same-origin.https.html",
+      "subtest": "Same-origin iframe tool with default exposure is visible to parent",
+      "lines": [124,162],
+      "scope": "out",
+      "reason": "iframes (multi-document), exposedTo defaults"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-defaults-same-origin.https.html",
+      "subtest": "Same-origin iframe tool with empty exposedTo array is visible to parent",
+      "lines": [164,203],
+      "scope": "out",
+      "reason": "iframes (multi-document), exposedTo defaults"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like / in exposedTo",
+      "lines": [26,44],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like * in exposedTo",
+      "lines": [26,44],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like https://example:bogus in exposedTo",
+      "lines": [26,44],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like https://\ud800.com in exposedTo",
+      "lines": [26,44],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like http://example.com in exposedTo",
+      "lines": [26,44],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like ftp://example.com in exposedTo",
+      "lines": [26,44],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like about:blank in exposedTo",
+      "lines": [26,44],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like about:srcdoc in exposedTo",
+      "lines": [26,44],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like https://example.com in exposedTo",
+      "lines": [26,44],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like http://localhost:3000 in exposedTo",
+      "lines": [26,44],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "registerTool() with abort signal reason because signal is processed before `exposedTo`",
+      "lines": [47,54],
+      "scope": "out",
+      "reason": "exposedTo origin validation (SecurityError)"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
+      "subtest": "Aborting a signal from a rejected registration must not unregister a later valid tool with the same name",
+      "lines": [56,95],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"test_tool_0.25","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"test_tool_0.75","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null}
+      ],
+      "setupNote": "the two successful registrations of earlier subtests ('test_tool_' + Math.random(), exposedTo a valid origin); exposedTo is dropped, which does not change what this document's getTools() returns",
+      "trace": [
+        {"op":"register","name":"target_tool","title":null,"description":"","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":1},
+        {"op":"register","name":"target_tool","title":null,"description":"Target tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":2},
+        {"op":"getTools"},
+        {"op":"abort","signal":1},
+        {"op":"register","name":"target_tool","title":null,"description":"Target tool replacement","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"execute","call":0,"index":0,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":1,"line":69,"assert":"await registerTool(target_tool, {signal: ac2}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":77,"assert":"[tool] = getTools() is target_tool","want":{"tool":"target_tool","field":"description","equals":"Target tool"},"setup":true},
+        {"at":4,"line":89,"assert":"after ac1.abort(), registering target_tool again rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":5,"line":94,"assert":"executeTool(tool) resolves with 'callback2'","want":{"outcome":"result:hi"},"proxy":"the tool returns the string 'callback2' -> model `returnText` ('hi')","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}}
+      ],
+      "notExpressible": [
+        {"line":65,"assert":"the first registration rejects SecurityError (exposedTo: ['http://insecure.example'])","why":"exposedTo is out of the model's scope. The trace makes the first registration (with signal ac1) fail on the empty-description step instead, which also returns before the abort steps are added, so aborting ac1 must not touch target_tool either way"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-multiple-children.https.html",
+      "subtest": "Multi-origin setup with mixed exposure lists",
+      "lines": [15,101],
+      "scope": "out",
+      "reason": "cross-origin iframes, exposedTo"
+    },
+    {
+      "file": "webmcp/imperative/exposedTo-window-open.https.html",
+      "subtest": "Tools are scoped to a frame tree, and are not exposed across opener boundaries.",
+      "lines": [15,53],
+      "scope": "out",
+      "reason": "multiple frame trees (window.open), exposedTo"
+    },
+    {
+      "file": "webmcp/imperative/getTools-filtering.https.html",
+      "subtest": "getTools() correctly filters returned tools by fromOrigins origins while preserving same-origin tools",
+      "lines": [28,96],
+      "scope": "out",
+      "reason": "cross-origin iframes, getTools({fromOrigins}) filtering and validation"
+    },
+    {
+      "file": "webmcp/imperative/getTools-filtering.https.html",
+      "subtest": "getTools() rejects with SecurityError if an insecure origin is supplied in fromOrigins",
+      "lines": [98,100],
+      "scope": "out",
+      "reason": "cross-origin iframes, getTools({fromOrigins}) filtering and validation"
+    },
+    {
+      "file": "webmcp/imperative/getTools-imperative-annotations.https.html",
+      "subtest": "Test that getTools() returns explicit annotations for an imperative tool",
+      "lines": [9,37],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"annotated_tool","title":null,"description":"A tool with explicit annotations","inputSchema":"absent","outputSchema":"absent","annotations":{"readOnlyHint":true,"untrustedContentHint":true,"consequentialHint":false,"debugging":true},"behavior":"echo","signal":0},
+        {"op":"getTools"},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":24,"assert":"await registerTool(tool, {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":35,"assert":"assert_object_equals(annotations, {\"readOnlyHint\":true,\"untrustedContentHint\":true,\"consequentialHint\":false,\"debugging\":true})","want":{"tool":"annotated_tool","field":"annotations","json":{"readOnlyHint":true,"untrustedContentHint":true,"consequentialHint":false,"debugging":true}}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/getTools-imperative-annotations.https.html",
+      "subtest": "Test that getTools() populates default values for omitted annotation properties",
+      "lines": [39,64],
+      "scope": "in",
+      "setupNote": "earlier subtests' tools are unregistered by their cleanup",
+      "trace": [
+        {"op":"register","name":"partial_annotated_tool","title":null,"description":"A tool with only readOnlyHint supplied","inputSchema":"absent","outputSchema":"absent","annotations":{"readOnlyHint":true},"behavior":"echo","signal":1},
+        {"op":"getTools"},
+        {"op":"abort","signal":1}
+      ],
+      "checks": [
+        {"at":0,"line":51,"assert":"await registerTool(tool, {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":62,"assert":"assert_object_equals(annotations, {\"readOnlyHint\":true,\"untrustedContentHint\":false,\"consequentialHint\":false,\"debugging\":false})","want":{"tool":"partial_annotated_tool","field":"annotations","json":{"readOnlyHint":true,"untrustedContentHint":false,"consequentialHint":false,"debugging":false}}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/getTools-imperative-annotations.https.html",
+      "subtest": "Test that getTools() returns default values when annotations object is empty",
+      "lines": [66,89],
+      "scope": "in",
+      "setupNote": "earlier subtests' tools are unregistered by their cleanup",
+      "trace": [
+        {"op":"register","name":"empty_annotated_tool","title":null,"description":"A tool with empty annotations object","inputSchema":"absent","outputSchema":"absent","annotations":{},"behavior":"echo","signal":2},
+        {"op":"getTools"},
+        {"op":"abort","signal":2}
+      ],
+      "checks": [
+        {"at":0,"line":76,"assert":"await registerTool(tool, {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":87,"assert":"assert_object_equals(annotations, {\"readOnlyHint\":false,\"untrustedContentHint\":false,\"consequentialHint\":false,\"debugging\":false})","want":{"tool":"empty_annotated_tool","field":"annotations","json":{"readOnlyHint":false,"untrustedContentHint":false,"consequentialHint":false,"debugging":false}}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/getTools-imperative-annotations.https.html",
+      "subtest": "Test that getTools() returns null annotations when omitted at registration",
+      "lines": [91,105],
+      "scope": "in",
+      "setupNote": "earlier subtests' tools are unregistered by their cleanup",
+      "trace": [
+        {"op":"register","name":"unannotated_tool","title":null,"description":"A tool without annotations property","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":3},
+        {"op":"getTools"},
+        {"op":"abort","signal":3}
+      ],
+      "checks": [
+        {"at":0,"line":100,"assert":"await registerTool(tool, {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":104,"assert":"registeredTool.annotations === null","want":{"tool":"unannotated_tool","field":"annotations","isNull":true}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/getTools-imperative-schema.https.html",
+      "subtest": "Test that getTools() returns the correct inputSchema for an imperative tool",
+      "lines": [9,63],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"search_tool","title":null,"description":"Search the web","inputSchema":"object","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":34,"assert":"await registerTool(tool) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":37,"assert":"tools.length == 1","want":{"count":1}},
+        {"at":1,"line":40,"assert":"name == 'search_tool'","want":{"tool":"search_tool","field":"name","equals":"search_tool"}},
+        {"at":1,"line":41,"assert":"description == 'Search the web'","want":{"tool":"search_tool","field":"description","equals":"Search the web"}},
+        {"at":1,"line":43,"assert":"inputSchema is non-null","want":{"tool":"search_tool","field":"inputSchema","notNull":true}},
+        {"at":1,"line":44,"assert":"inputSchema.type == 'object'","want":{"tool":"search_tool","field":"inputSchema","path":"type","equals":"object"},"proxy":"the WPT schema {type:'object', properties:{query, limit, safe_search}, required:['query']} -> model `object` ({type:'object'})"},
+        {"at":1,"line":62,"assert":"outputSchema === null","want":{"tool":"search_tool","field":"outputSchema","isNull":true}}
+      ],
+      "notExpressible": [
+        {"line":"47-60","assert":"inputSchema.properties.* and .required round-trip","why":"the model's schemas are {type:'object'} and {type:'string'} only; nested members are a property of JSON round-tripping, not of any spec step the model encodes"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/getTools-imperative-schema.https.html",
+      "subtest": "Test that getTools() returns the correct outputSchema for an imperative tool",
+      "lines": [65,96],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"search_tool","title":null,"description":"Search the web","inputSchema":"object","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "setupNote": "'search_tool' from the previous subtest (no signal, never unregistered)",
+      "trace": [
+        {"op":"register","name":"output_schema_tool","title":null,"description":"Tool with output schema","inputSchema":"absent","outputSchema":"object","annotations":null,"behavior":"echo","signal":0},
+        {"op":"getTools"},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":83,"assert":"await registerTool(tool, {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":88,"assert":"tool is found","want":{"tool":"output_schema_tool","field":"name","equals":"output_schema_tool"},"setup":true},
+        {"at":1,"line":89,"assert":"inputSchema === null","want":{"tool":"output_schema_tool","field":"inputSchema","isNull":true}},
+        {"at":1,"line":90,"assert":"outputSchema is non-null","want":{"tool":"output_schema_tool","field":"outputSchema","notNull":true}},
+        {"at":1,"line":91,"assert":"outputSchema.type == 'object'","want":{"tool":"output_schema_tool","field":"outputSchema","path":"type","equals":"object"},"proxy":"the WPT outputSchema (with properties and required) -> model `object`"}
+      ],
+      "notExpressible": [
+        {"line":"92-95","assert":"outputSchema.properties.result.* and .required","why":"as in the previous subtest"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/getTools.https.html",
+      "subtest": "getTools should return all tools sorted in lexicographical order",
+      "lines": [11,36],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"c","title":null,"description":"tool registered first","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null},
+        {"op":"register","name":"b","title":null,"description":"tool registered second","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":0},
+        {"op":"register","name":"a","title":null,"description":"tool registered last","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null},
+        {"op":"getTools"},
+        {"op":"abort","signal":0},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":19,"assert":"await registerTool(tool_c) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":20,"assert":"await registerTool(tool_b, {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":21,"assert":"await registerTool(tool_a) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":3,"line":24,"assert":"tools.length == 3, names a, b, c","want":{"names":["a","b","c"]}},
+        {"at":5,"line":33,"assert":"after abort: tools.length == 2, names a, c","want":{"names":["a","c"]}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/initial-about-blank-replacement-register-tool.https.html",
+      "subtest": "The about:blank document that replaces the initial about:blank document can register tools",
+      "lines": [20,44],
+      "scope": "out",
+      "reason": "navigation / document replacement, iframes"
+    },
+    {
+      "file": "webmcp/imperative/initial-about-blank-replacement-removes-tools.https.html",
+      "subtest": "Tools registered by the initial about:blank document are removed when about:blank replaces it",
+      "lines": [20,40],
+      "scope": "out",
+      "reason": "navigation / document replacement, iframes"
+    },
+    {
+      "file": "webmcp/imperative/initial-about-blank-shared-tool.https.html",
+      "subtest": "tools registered with the initial about:blank Document do not survive navigation",
+      "lines": [8,33],
+      "scope": "out",
+      "reason": "navigation / document replacement, iframes"
+    },
+    {
+      "file": "webmcp/imperative/javascript-url-document-replacement.https.html",
+      "subtest": "A document that replaces another via a javascript: URL can register tools",
+      "lines": [25,48],
+      "scope": "out",
+      "reason": "navigation / document replacement, iframes"
+    },
+    {
+      "file": "webmcp/imperative/model_context.https.html",
+      "subtest": "document.modelContext instanceof ModelContext",
+      "lines": [11,13],
+      "scope": "out",
+      "reason": "interface identity (instanceof); the model has no IDL surface"
+    },
+    {
+      "file": "webmcp/imperative/model_context.https.html",
+      "subtest": "document.modelContext SameObject",
+      "lines": [15,17],
+      "scope": "out",
+      "reason": "[SameObject] identity; the model has no IDL surface"
+    },
+    {
+      "file": "webmcp/imperative/model_context.https.html",
+      "subtest": "createHTMLDocument().modelContext rejects tool operations with InvalidStateError, with active document first",
+      "lines": [21,70],
+      "scope": "out",
+      "reason": "document without a browsing context (fully-active checks), iframes"
+    },
+    {
+      "file": "webmcp/imperative/model_context.https.html",
+      "subtest": "createHTMLDocument().modelContext rejects tool operations with InvalidStateError, with inactive document first",
+      "lines": [21,70],
+      "scope": "out",
+      "reason": "document without a browsing context (fully-active checks), iframes"
+    },
+    {
+      "file": "webmcp/imperative/non-secure.html",
+      "subtest": "document.modelContext is not supported in non-secure context.",
+      "lines": [11,13],
+      "scope": "out",
+      "reason": "secure-context exposure ([SecureContext])"
+    },
+    {
+      "file": "webmcp/imperative/object-arguments.https.html",
+      "subtest": "tool execution requires a JSON Object input argument; and Arrays are Objects",
+      "lines": [7,75],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"test-tool","title":null,"description":"Tool for testing various JSON primitive inputs","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"cyclic"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":0,"line":18,"assert":"await registerTool(tool) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":51,"assert":"executeTool(tool, {toJSON: () => undefined}) rejects TypeError","want":{"outcome":"err:TypeError"},"proxy":"input {toJSON: () => undefined} -> model `cyclic`; both make 'serializing a JavaScript value to a JSON string' throw TypeError (executeTool() step 8)"},
+        {"at":3,"line":58,"assert":"executeTool(tool) resolves with \"Success\"","want":{"outcome":"result:hi"},"proxy":"the tool returns the string 'Success' -> model `returnText` (returns 'hi'); the WPT assertion is that the result is the returned string itself, so 'hi'","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}},
+        {"at":4,"line":66,"assert":"executeTool(tool, undefined) resolves with \"Success\"","want":{"outcome":"result:hi"},"proxy":"as above; Web IDL treats an explicit undefined for an optional argument as missing, so the input is `omitted`","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}},
+        {"at":5,"line":73,"assert":"executeTool(tool, undefined, {}) resolves with \"Success\"","want":{"outcome":"result:hi"},"proxy":"as above; options {} has no signal, which the model never uses","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}}
+      ],
+      "extra": {
+        "note": "The tool also records the argument it received. The model's `keys` behaviour reports Object.keys of it, so a second trace checks the assert_object_equals(executeReceivedArgs, {}) lines.",
+        "trace": [
+          {"op":"register","name":"test-tool","title":null,"description":"Tool for testing various JSON primitive inputs","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"keys","signal":null},
+          {"op":"getTools"},
+          {"op":"execute","call":0,"index":0,"input":"omitted"},
+          {"op":"execute","call":0,"index":0,"input":"omitted"},
+          {"op":"execute","call":0,"index":0,"input":"omitted"}
+        ],
+        "checks": [
+          {"at":2,"line":59,"assert":"executeReceivedArgs equals {} after executeTool(tool)","want":{"outcome":"result:[]"},"proxy":"Object.keys(received) == [] stands for assert_object_equals(received, {})"},
+          {"at":3,"line":67,"assert":"executeReceivedArgs equals {} after executeTool(tool, undefined)","want":{"outcome":"result:[]"},"proxy":"as above"},
+          {"at":4,"line":74,"assert":"executeReceivedArgs equals {} after executeTool(tool, undefined, {})","want":{"outcome":"result:[]"},"proxy":"as above"}
+        ]
+      },
+      "notExpressible": [
+        {"line":"23-25","assert":"executeTool(tool, [1,2,3]) resolves 'Success' and the tool receives [1,2,3]","why":"the model has no array input (an Array is an Object, so the spec runs the tool; the result would again be a #361 case)"},
+        {"line":29,"assert":"executeTool(tool, 'hello') rejects TypeError","why":"the model has no primitive inputs; Web IDL conversion of a string to `object` throws TypeError (spec IDL: `optional object inputObject`)"},
+        {"line":34,"assert":"executeTool(tool, 123) rejects TypeError","why":"as above"},
+        {"line":39,"assert":"executeTool(tool, true) rejects TypeError","why":"as above"},
+        {"line":44,"assert":"executeTool(tool, null) rejects TypeError","why":"as above (`object` is not nullable)"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/opaque-origin-tools.https.html",
+      "subtest": "An opaque origin document can register and execute its own tools",
+      "lines": [73,93],
+      "scope": "out",
+      "reason": "opaque origins, sandboxed iframes, popups"
+    },
+    {
+      "file": "webmcp/imperative/opaque-origin-tools.https.html",
+      "subtest": "A document inside a sandboxed (opaque) iframe can execute its own tool",
+      "lines": [95,138],
+      "scope": "out",
+      "reason": "opaque origins, sandboxed iframes, popups"
+    },
+    {
+      "file": "webmcp/imperative/opaque-origin-tools.https.html",
+      "subtest": "An opaque-origin srcdoc child can register and execute its own tool",
+      "lines": [140,201],
+      "scope": "out",
+      "reason": "opaque origins, sandboxed iframes, popups"
+    },
+    {
+      "file": "webmcp/imperative/opaque-origin-tools.https.html",
+      "subtest": "Two Documents sharing a copied opaque origin can see and execute each other's tools",
+      "lines": [203,239],
+      "scope": "out",
+      "reason": "opaque origins, sandboxed iframes, popups"
+    },
+    {
+      "file": "webmcp/imperative/opaque-origin-tools.https.html",
+      "subtest": "A document with a different opaque origin cannot obtain or execute the tool",
+      "lines": [241,286],
+      "scope": "out",
+      "reason": "opaque origins, sandboxed iframes, popups"
+    },
+    {
+      "file": "webmcp/imperative/permissions-policy.https.html",
+      "subtest": "registerTool() rejects in iframe, after navigation to an origin not covered by permissions policy",
+      "lines": [15,59],
+      "scope": "out",
+      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+    },
+    {
+      "file": "webmcp/imperative/permissions-policy.https.html",
+      "subtest": "getTools() throws NotAllowedError in iframe when permissions policy is disabled",
+      "lines": [61,85],
+      "scope": "out",
+      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+    },
+    {
+      "file": "webmcp/imperative/permissions-policy.https.html",
+      "subtest": "executeTool() throws NotAllowedError in iframe when permissions policy is disabled",
+      "lines": [87,118],
+      "scope": "out",
+      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+    },
+    {
+      "file": "webmcp/imperative/permissions-policy.https.html",
+      "subtest": "registerTool() throws NotAllowedError in iframe when permissions policy is disabled",
+      "lines": [120,140],
+      "scope": "out",
+      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+    },
+    {
+      "file": "webmcp/imperative/permissions-policy.https.html",
+      "subtest": "getTools() throws NotAllowedError in same-origin iframe when permissions policy is disabled",
+      "lines": [142,158],
+      "scope": "out",
+      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+    },
+    {
+      "file": "webmcp/imperative/permissions-policy.https.html",
+      "subtest": "resumeTool() throws NotAllowedError in iframe when permissions policy is disabled",
+      "lines": [160,176],
+      "scope": "out",
+      "reason": "non-modelled API resumeTool() (not in the spec IDL at 14b6d53), permissions policy"
+    },
+    {
+      "file": "webmcp/imperative/permissions-policy.https.html",
+      "subtest": "waitForToolsUntil() throws NotAllowedError in iframe when permissions policy is disabled",
+      "lines": [178,195],
+      "scope": "out",
+      "reason": "non-modelled API waitForToolsUntil() (not in the spec IDL at 14b6d53), permissions policy"
+    },
+    {
+      "file": "webmcp/imperative/permissions-policy.https.html",
+      "subtest": "executeTool() rejects when target frame revokes exposedTo permission after getTools()",
+      "lines": [197,251],
+      "scope": "out",
+      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+    },
+    {
+      "file": "webmcp/imperative/register-tool-input-schema-registers-same-name.https.html",
+      "subtest": "A tool registered during inputSchema serialization makes the outer registration a duplicate",
+      "lines": [14,44],
+      "scope": "out",
+      "reason": "page script run by toJSON() during registerTool() (the model's toJSON runs no script, so it omits the second duplicate-name check)"
+    },
+    {
+      "file": "webmcp/imperative/register-tool-input-schema-removes-iframe-crash.https.html",
+      "subtest": "(crash test: no subtests; passes if the page finishes without crashing)",
+      "lines": null,
+      "scope": "out",
+      "reason": "crash test with iframe removal / navigation / re-entrancy"
+    },
+    {
+      "file": "webmcp/imperative/register-tool-title.https.html",
+      "subtest": "Tool title is preserved when provided",
+      "lines": [14,26],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"with-title","title":"My Custom Title","description":"tool with title","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":15,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":25,"assert":"tool.title == 'My Custom Title'","want":{"tool":"with-title","field":"title","equals":"My Custom Title"}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register-tool-title.https.html",
+      "subtest": "Missing tool title in registration is exposed as empty string",
+      "lines": [28,41],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"with-title","title":"My Custom Title","description":"tool with title","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null}
+      ],
+      "setupNote": "'with-title' from the previous subtest",
+      "trace": [
+        {"op":"register","name":"without-title","title":null,"description":"tool without title","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":29,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":40,"assert":"tool.title == ''","want":{"tool":"without-title","field":"title","equals":""}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register-tool-title.https.html",
+      "subtest": "Tool title with unpaired surrogate is fixed up by USVString",
+      "lines": [43,57],
+      "scope": "in",
+      "trace": [],
+      "checks": [],
+      "notExpressible": [
+        {"line":56,"assert":"title '\\uD800' comes back as '\\uFFFD'","why":"USVString conversion is Web IDL, not a spec step the model encodes, and the oracle's strings (Lean String over JSON) cannot hold a lone surrogate"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_invalid_json_schema.https.html",
+      "subtest": "registerTool rejects when inputSchema.toJSON() returns undefined",
+      "lines": [27,30],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"empty","title":null,"description":"empty","inputSchema":"unserializable","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "checks": [
+        {"at":0,"line":13,"assert":"registerTool rejects TypeError","want":{"outcome":"err:TypeError"},"proxy":"inputSchema {toJSON: () => undefined} -> model `unserializable` (a cycle). Both make 'serializing a JavaScript value to a JSON string' throw a TypeError (spec.bs 'serialize a tool schema' note)."}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_invalid_json_schema.https.html",
+      "subtest": "registerTool rejects when inputSchema contains a circular reference",
+      "lines": [32,39],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"empty","title":null,"description":"empty","inputSchema":"unserializable","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "checks": [{"at":0,"line":13,"assert":"registerTool rejects TypeError","want":{"outcome":"err:TypeError"}}]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_invalid_json_schema.https.html",
+      "subtest": "registerTool rejects when inputSchema contains non-serializable types (BigInt)",
+      "lines": [41,44],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"empty","title":null,"description":"empty","inputSchema":"nonObject","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "checks": [
+        {"at":0,"line":13,"assert":"registerTool rejects TypeError","want":{"outcome":"err:TypeError"},"proxy":"inputSchema: BigInt(42) -> model `nonObject` (the string \"x\"). Both fail Web IDL conversion to `object` with a TypeError before any method step."}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_invalid_json_schema.https.html",
+      "subtest": "registerTool rejects on invalid schema even if an aborted signal was provided",
+      "lines": [46,71],
+      "scope": "in",
+      "trace": [
+        {"op":"abort","signal":9},
+        {"op":"register","name":"aborted_invalid_schema","title":null,"description":"empty","inputSchema":"unserializable","outputSchema":"absent","annotations":null,"behavior":"echo","signal":9}
+      ],
+      "checks": [
+        {"at":1,"line":52,"assert":"registerTool with circular schema and AbortSignal.abort('aborted') rejects TypeError (schema checked before signal)","want":{"outcome":"err:TypeError"},"proxy":"AbortSignal.abort('aborted') -> a signal the trace aborts first (default reason); the reason is never observed because the TypeError wins"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_invalid_json_schema.https.html",
+      "subtest": "registerTool rejects when outputSchema.toJSON() returns undefined",
+      "lines": [89,92],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"empty_output","title":null,"description":"empty","inputSchema":"absent","outputSchema":"unserializable","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "checks": [
+        {"at":0,"line":75,"assert":"registerTool rejects TypeError","want":{"outcome":"err:TypeError"},"proxy":"outputSchema {toJSON: () => undefined} -> model `unserializable` (a cycle). Both make 'serializing a JavaScript value to a JSON string' throw a TypeError (spec.bs 'serialize a tool schema' note)."}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_invalid_json_schema.https.html",
+      "subtest": "registerTool rejects when outputSchema contains a circular reference",
+      "lines": [94,101],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"empty_output","title":null,"description":"empty","inputSchema":"absent","outputSchema":"unserializable","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "checks": [{"at":0,"line":75,"assert":"registerTool rejects TypeError","want":{"outcome":"err:TypeError"}}]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_invalid_json_schema.https.html",
+      "subtest": "registerTool rejects when outputSchema contains non-serializable types (BigInt)",
+      "lines": [103,106],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"empty_output","title":null,"description":"empty","inputSchema":"absent","outputSchema":"nonObject","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "checks": [
+        {"at":0,"line":75,"assert":"registerTool rejects TypeError","want":{"outcome":"err:TypeError"},"proxy":"outputSchema: BigInt(42) -> model `nonObject` (the string \"x\"). Both fail Web IDL conversion to `object` with a TypeError before any method step."}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_invalid_json_schema.https.html",
+      "subtest": "registerTool rejects on invalid output schema even if an aborted signal was provided",
+      "lines": [108,133],
+      "scope": "in",
+      "trace": [
+        {"op":"abort","signal":9},
+        {"op":"register","name":"aborted_invalid_output_schema","title":null,"description":"empty","inputSchema":"absent","outputSchema":"unserializable","annotations":null,"behavior":"echo","signal":9}
+      ],
+      "checks": [
+        {"at":1,"line":114,"assert":"registerTool with circular schema and AbortSignal.abort('aborted') rejects TypeError (schema checked before signal)","want":{"outcome":"err:TypeError"},"proxy":"AbortSignal.abort('aborted') -> a signal the trace aborts first (default reason); the reason is never observed because the TypeError wins"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_name_validation.https.html",
+      "subtest": "Valid tool names are accepted.",
+      "lines": [11,31],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"a","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"A","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"0","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"valid-name","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"valid_name","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"valid.name","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"valid-name.with_extras-123","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null}
+      ],
+      "checks": [
+        {"at":0,"line":25,"assert":"registerTool name \"a\" fulfils","want":{"outcome":"ok"}},
+        {"at":1,"line":25,"assert":"registerTool name \"A\" fulfils","want":{"outcome":"ok"}},
+        {"at":2,"line":25,"assert":"registerTool name \"0\" fulfils","want":{"outcome":"ok"}},
+        {"at":3,"line":25,"assert":"registerTool name \"valid-name\" fulfils","want":{"outcome":"ok"}},
+        {"at":4,"line":25,"assert":"registerTool name \"valid_name\" fulfils","want":{"outcome":"ok"}},
+        {"at":5,"line":25,"assert":"registerTool name \"valid.name\" fulfils","want":{"outcome":"ok"}},
+        {"at":6,"line":25,"assert":"registerTool name \"val...(26)\" fulfils","want":{"outcome":"ok"}},
+        {"at":7,"line":25,"assert":"registerTool name \"aaa...(128)\" fulfils","want":{"outcome":"ok"}}
+      ],
+      "notes": "execute is `async () => 'empty'`; modelled as returnText (never executed)."
+    },
+    {
+      "file": "webmcp/imperative/register_tool_name_validation.https.html",
+      "subtest": "Invalid tool names throw InvalidStateError.",
+      "lines": [33,79],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"a","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"A","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"0","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"valid-name","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"valid_name","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"valid.name","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"valid-name.with_extras-123","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","title":null,"description":"valid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null}
+      ],
+      "setupNote": "the tools the previous subtest registered (never unregistered)",
+      "trace": [
+        {"op":"register","name":"","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name with space","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name@special","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name#special","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name$special","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name%","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name^","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name&","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name*","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name(","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name)","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name+","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name=","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name[","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name]","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name{","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name}","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name|","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name\\","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name:","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name;","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name\"","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name'","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name<","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name>","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name?","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name/","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name`","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
+        {"op":"register","name":"name~","title":null,"description":"invalid name test","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null}
+      ],
+      "checks": [
+        {"at":0,"line":69,"assert":"registerTool name \"\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":1,"line":69,"assert":"registerTool name \"aaa...(129)\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":2,"line":69,"assert":"registerTool name \"name with space\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":3,"line":69,"assert":"registerTool name \"name@special\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":4,"line":69,"assert":"registerTool name \"name#special\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":5,"line":69,"assert":"registerTool name \"name$special\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":6,"line":69,"assert":"registerTool name \"name%\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":7,"line":69,"assert":"registerTool name \"name^\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":8,"line":69,"assert":"registerTool name \"name&\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":9,"line":69,"assert":"registerTool name \"name*\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":10,"line":69,"assert":"registerTool name \"name(\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":11,"line":69,"assert":"registerTool name \"name)\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":12,"line":69,"assert":"registerTool name \"name+\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":13,"line":69,"assert":"registerTool name \"name=\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":14,"line":69,"assert":"registerTool name \"name[\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":15,"line":69,"assert":"registerTool name \"name]\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":16,"line":69,"assert":"registerTool name \"name{\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":17,"line":69,"assert":"registerTool name \"name}\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":18,"line":69,"assert":"registerTool name \"name|\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":19,"line":69,"assert":"registerTool name \"name\\\\\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":20,"line":69,"assert":"registerTool name \"name:\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":21,"line":69,"assert":"registerTool name \"name;\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":22,"line":69,"assert":"registerTool name \"name\\\"\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":23,"line":69,"assert":"registerTool name \"name'\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":24,"line":69,"assert":"registerTool name \"name<\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":25,"line":69,"assert":"registerTool name \"name>\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":26,"line":69,"assert":"registerTool name \"name?\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":27,"line":69,"assert":"registerTool name \"name/\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":28,"line":69,"assert":"registerTool name \"name`\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
+        {"at":29,"line":69,"assert":"registerTool name \"name~\" rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_no_schema.https.html",
+      "subtest": "register tool with only required params",
+      "lines": [11,21],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"empty","title":null,"description":"echo empty","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":0},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [{"at":0,"line":19,"assert":"await registerTool(tool, {signal}) fulfils","want":{"outcome":"ok"}}]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_signal.https.html",
+      "subtest": "register tool promise rejects with AbortError when signal gets aborted",
+      "lines": [17,22],
+      "scope": "in",
+      "trace": [
+        {"op":"registerAbortSync","name":"empty","title":null,"description":"empty","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":21,"assert":"registerTool(tool, {signal}); controller.abort(); promise rejects AbortError","want":{"outcome":"err:AbortError"}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_signal.https.html",
+      "subtest": "register tool promise rejects with error when signal gets aborted",
+      "lines": [24,30],
+      "scope": "in",
+      "trace": [],
+      "checks": [],
+      "notExpressible": [
+        {"line":29,"assert":"promise rejects with exactly the Error passed to controller.abort(error)","why":"the model's signals abort only with the default reason (an AbortError DOMException); a custom abort reason is not in its value set"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_signal.https.html",
+      "subtest": "register tool promise rejects when signal is already aborted",
+      "lines": [32,36],
+      "scope": "in",
+      "trace": [],
+      "checks": [],
+      "notExpressible": [
+        {"line":35,"assert":"promise rejects with exactly 'aborted' (AbortSignal.abort('aborted'))","why":"custom abort reason, as above; the model would say err:AbortError for an already-aborted default-reason signal"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_signal.https.html",
+      "subtest": "aborting signal unregister tool",
+      "lines": [38,51],
+      "scope": "in",
+      "setupNote": "the earlier subtests leave no tool registered (each registration is aborted)",
+      "trace": [
+        {"op":"getTools"},
+        {"op":"register","name":"empty","title":null,"description":"empty","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":3},
+        {"op":"getTools"},
+        {"op":"abort","signal":3},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":40,"assert":"tools.length == 0","want":{"count":0}},
+        {"at":1,"line":43,"assert":"await registerTool(tool, {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":46,"assert":"tools.length == 1","want":{"count":1}},
+        {"at":4,"line":50,"assert":"after abort: tools.length == 0","want":{"count":0}}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_toolchange.https.html",
+      "subtest": "registerTool triggers toolchange before promise resolves",
+      "lines": [17,37],
+      "scope": "out",
+      "reason": "events (toolchange ordering)"
+    },
+    {
+      "file": "webmcp/imperative/register_tool_with_empty_annotation.https.html",
+      "subtest": "register tool with empty annotations",
+      "lines": [11,24],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"echo","title":null,"description":"echo input","inputSchema":"absent","outputSchema":"absent","annotations":{},"behavior":"echo","signal":0},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [{"at":0,"line":22,"assert":"await registerTool(tool, {signal}) fulfils","want":{"outcome":"ok"}}]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_with_schema.https.html",
+      "subtest": "register and unregister script tool",
+      "lines": [11,34],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"echo","title":null,"description":"echo input","inputSchema":"object","outputSchema":"absent","annotations":{"readOnlyHint":true},"behavior":"echo","signal":0},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":32,"assert":"await registerTool(tool, {signal}) fulfils","want":{"outcome":"ok"},"proxy":"inputSchema {type:'object', properties:{text:...}, required:[...]} -> model `object`; annotations {readOnlyHint: 'true'} (a string, which Web IDL converts to boolean true) -> {readOnlyHint: true}"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_with_schema.https.html",
+      "subtest": "registerTool succeeds when inputSchema.toJSON() returns 'undefined'",
+      "lines": [36,47],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"empty","title":null,"description":"empty","inputSchema":"viaToJSON","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "checks": [
+        {"at":0,"line":37,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"proxy":"inputSchema whose toJSON() returns the string 'undefined' -> model `viaToJSON` (toJSON() returns {type:'string'}); both make 'serialize a tool schema' call toJSON() and succeed. The model has no schema whose toJSON() returns a primitive; see the README on what getTools() should then expose."}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_with_schema.https.html",
+      "subtest": "register and unregister script tool with outputSchema",
+      "lines": [49,69],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"empty","title":null,"description":"empty","inputSchema":"viaToJSON","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "setupNote": "'empty' from the previous subtest",
+      "trace": [
+        {"op":"register","name":"output_tool","title":null,"description":"tool with output schema","inputSchema":"absent","outputSchema":"object","annotations":null,"behavior":"echo","signal":1},
+        {"op":"abort","signal":1}
+      ],
+      "checks": [
+        {"at":0,"line":67,"assert":"await registerTool(tool, {signal}) fulfils","want":{"outcome":"ok"},"proxy":"outputSchema {type:'object', properties:..., required:[...]} -> model `object`"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/register_tool_with_schema.https.html",
+      "subtest": "registerTool succeeds when outputSchema.toJSON() returns 'undefined'",
+      "lines": [71,82],
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"empty","title":null,"description":"empty","inputSchema":"viaToJSON","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "setupNote": "'empty' from the second subtest",
+      "trace": [
+        {"op":"register","name":"empty_output_undefined_string","title":null,"description":"empty","inputSchema":"absent","outputSchema":"viaToJSON","annotations":null,"behavior":"echo","signal":null}
+      ],
+      "checks": [
+        {"at":0,"line":72,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"proxy":"outputSchema whose toJSON() returns the string 'undefined' -> model `viaToJSON`"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/same-origin-iframe-registerTool-regression.https.html",
+      "subtest": "registerTool() does not reject in connected same-origin iframe navigated away of about:blank",
+      "lines": [10,26],
+      "scope": "out",
+      "reason": "iframes"
+    },
+    {
+      "file": "webmcp/imperative/tool-re-registration-race.https.html",
+      "subtest": "executeTool() rejects for a Tool that was unregistered and whose name was subsequently reused by a different tool",
+      "lines": [15,69],
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"race_tool","title":null,"description":"the original tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":0},
+        {"op":"getTools"},
+        {"op":"abort","signal":0},
+        {"op":"register","name":"race_tool","title":null,"description":"a different tool that reused the name","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null},
+        {"op":"execute","call":0,"index":0,"input":"omitted"},
+        {"op":"getTools"},
+        {"op":"execute","call":1,"index":0,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":0,"line":22,"assert":"await registerTool(original, {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":32,"assert":"stale_tool.description == 'the original tool'","want":{"tool":"race_tool","field":"description","equals":"the original tool"}},
+        {"at":3,"line":37,"assert":"await registerTool(replacement) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":4,"line":51,"assert":"executeTool(stale_tool, {}) rejects NotFoundError","want":{"outcome":"err:NotFoundError"}},
+        {"at":5,"line":63,"assert":"fresh_tool.description == 'a different tool that reused the name'","want":{"tool":"race_tool","field":"description","equals":"a different tool that reused the name"}},
+        {"at":6,"line":64,"assert":"executeTool(fresh_tool, {}) resolves with the JSON of the returned object","want":{"outcome":"result:{}"},"proxy":"the tool returns {which:'second'} and WPT expects '{\"which\":\"second\"}'; the model's object-returning behaviour is `echo`, which returns the received {} , so the same assertion reads '{}'. {} passed explicitly serializes like the omitted default."}
+      ],
+      "notExpressible": [
+        {"line":"48-49, 55-58, 66-67","assert":"stale_tool still describes the old tool after re-registration; first_executed/second_executed flags","why":"Tool objects are immutable snapshots in the model, and it does not record which callback ran beyond the outcome; covered implicitly by the NotFoundError and the fresh result"}
+      ]
+    },
+    {
+      "file": "webmcp/imperative/unregister-during-executeTool.https.html",
+      "subtest": "Pending executeTool() Promise resolves successfully when the target cross-origin tool is unregistered mid-execution",
+      "lines": [25,97],
+      "scope": "out",
+      "reason": "unregistration while an execution is pending (interleaving), execution signal, iframes"
+    },
+    {
+      "file": "webmcp/imperative/unregister-during-executeTool.https.html",
+      "subtest": "Pending executeTool() Promise resolves successfully when target same-document tool is unregistered mid-execution",
+      "lines": [99,134],
+      "scope": "out",
+      "reason": "unregistration while an execution is pending (interleaving), execution signal, iframes"
+    },
+    {
+      "file": "webmcp/imperative/unregister-during-executeTool.https.html",
+      "subtest": "executeTool() cancellation propagates to options.signal even when tool synchronously unregistered itself inside execute()",
+      "lines": [136,165],
+      "scope": "out",
+      "reason": "unregistration while an execution is pending (interleaving), execution signal, iframes"
+    },
+    {
+      "file": "webmcp/imperative/unregister-during-executeTool.https.html",
+      "subtest": "unregistering both outer and inner imperative tools during re-entrant executeTool() allows in-flight executions to settle",
+      "lines": [167,215],
+      "scope": "out",
+      "reason": "unregistration while an execution is pending (interleaving), execution signal, iframes"
+    },
+    {
+      "file": "webmcp/imperative/wait-for-tools-until-detach-crash.https.html",
+      "subtest": "(crash test: no subtests; passes if the page finishes without crashing)",
+      "lines": null,
+      "scope": "out",
+      "reason": "crash test with iframe removal / navigation / re-entrancy"
+    },
+    {
+      "file": "webmcp/imperative/wait-for-tools-until.https.html",
+      "subtest": "waitForToolsUntil() accepts non-promise values",
+      "lines": [14,18],
+      "scope": "out",
+      "reason": "non-modelled API waitForToolsUntil() (not in the spec IDL at 14b6d53)"
+    },
+    {
+      "file": "webmcp/imperative/wait-for-tools-until.https.html",
+      "subtest": "waitForToolsUntil() requires an argument",
+      "lines": [20,22],
+      "scope": "out",
+      "reason": "non-modelled API waitForToolsUntil() (not in the spec IDL at 14b6d53)"
+    },
+    {
+      "file": "webmcp/imperative/wait-for-tools-until.https.html",
+      "subtest": "waitForToolsUntil() throws InvalidStateError in a document without a frame",
+      "lines": [24,28],
+      "scope": "out",
+      "reason": "non-modelled API waitForToolsUntil() (not in the spec IDL at 14b6d53)"
+    },
+    {
+      "file": "webmcp/imperative/wait-for-tools-until.https.html",
+      "subtest": "waitForToolsUntil() throws NotAllowedError when the tools permissions policy is disabled",
+      "lines": [30,47],
+      "scope": "out",
+      "reason": "non-modelled API waitForToolsUntil() (not in the spec IDL at 14b6d53)"
+    },
+    {
+      "file": "webmcp/tool-activated-event.https.html",
+      "subtest": "ToolActivatedEvent constructor with default event init dictionary",
+      "lines": [10,18],
+      "scope": "out",
+      "reason": "events (ToolActivatedEvent, ontoolactivated)"
+    },
+    {
+      "file": "webmcp/tool-activated-event.https.html",
+      "subtest": "ToolActivatedEvent constructor with an event init dictionary",
+      "lines": [20,31],
+      "scope": "out",
+      "reason": "events (ToolActivatedEvent, ontoolactivated)"
+    },
+    {
+      "file": "webmcp/tool-activated-event.https.html",
+      "subtest": "ontoolactivated is invoked for synthetic toolactivated events dispatched at ModelContext",
+      "lines": [33,47],
+      "scope": "out",
+      "reason": "events (ToolActivatedEvent, ontoolactivated)"
+    },
+    {
+      "file": "webmcp/tool-activated-event.https.html",
+      "subtest": "ontoolactivated is invoked when a tool is activated",
+      "lines": [49,83],
+      "scope": "out",
+      "reason": "events (ToolActivatedEvent, ontoolactivated)"
+    },
+    {
+      "file": "webmcp/tool-cancel-event.https.html",
+      "subtest": "ToolCancelEvent constructor with default event init dictionary",
+      "lines": [10,18],
+      "scope": "out",
+      "reason": "events (ToolCancelEvent, ontoolcancel)"
+    },
+    {
+      "file": "webmcp/tool-cancel-event.https.html",
+      "subtest": "ToolCancelEvent constructor with an event init dictionary",
+      "lines": [20,31],
+      "scope": "out",
+      "reason": "events (ToolCancelEvent, ontoolcancel)"
+    },
+    {
+      "file": "webmcp/tool-cancel-event.https.html",
+      "subtest": "ontoolcancel is invoked for synthetic toolcancel events dispatched at ModelContext",
+      "lines": [33,47],
+      "scope": "out",
+      "reason": "events (ToolCancelEvent, ontoolcancel)"
+    },
+    {
+      "file": "webmcp/tool-cancel-event.https.html",
+      "subtest": "ontoolcancel is invoked when a tool invocation is canceled",
+      "lines": [49,104],
+      "scope": "out",
+      "reason": "events (ToolCancelEvent, ontoolcancel)"
+    }
+  ]
+}
