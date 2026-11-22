@@ -1,6 +1,6 @@
 # WebMCP conformance: a Lean reference model
 
-An executable model of the [WebMCP spec](https://webmachinelearning.github.io/webmcp/), written in Lean 4, with machine-checked proofs about it and a harness that runs the same randomly generated API-call sequences against every WebMCP implementation it can reach. Each implementation gets compared against the model call by call, and every disagreement is shrunk to a minimal repro.
+An executable model of the [WebMCP spec](https://webmachinelearning.github.io/webmcp/), written in Lean 4, with machine-checked proofs about it and a harness that runs the same randomly generated API-call sequences against WebMCP implementations: today the polyfill and Chromium builds. Each implementation gets compared against the model call by call, and every disagreement is shrunk to a minimal repro.
 
 The aim is to give implementers one concrete target instead of each reading the prose differently. See [RESULTS.md](RESULTS.md) for where the polyfill and Chromium stand today.
 
@@ -18,6 +18,27 @@ The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a smal
 | [`corpus/`](corpus) | 1,000 recorded traces with expected outcomes, for running without Lean. |
 | [`spec/anchors.json`](spec/anchors.json), [`tools/check-spec.cjs`](tools/check-spec.cjs) | The spec commit the model reflects, and a hash of each part of `index.bs` it transcribes. |
 
+## Reading the Lean
+
+You don't need to know Lean to follow `WebMCP/Model.lean` against the spec. Each definition's docstring names the spec algorithm (`Spec: #anchor`), and each check inside it quotes the step it models. The module doc at the top of the file has a table from spec terms (tool definition, `Tool`, tool id) to Lean names. The syntax that comes up most:
+
+| Lean | Roughly, in JavaScript |
+|---|---|
+| `def f (s : State) (t : ToolArgs) : Outcome := ...` | `function f(s, t) { return ... }`, with types |
+| `structure ToolDef where id : Nat ...` | a plain object type with those fields |
+| `inductive Err where \| typeError \| abort ...` | an enum (each case can carry data) |
+| `.err .abort` | `{kind: "err", error: "AbortError"}` |
+| `Option String`, `some x`, `none` | a value that may be absent: `x` or `null` |
+| `match x with \| some v => a \| none => b` | `x != null ? a : b`, with `v = x` |
+| `{ s with tools := ts }` | `{...s, tools: ts}` |
+| `(·.name)` | `t => t.name` |
+| `⟨d.id, d.name⟩` | build a structure from its fields in order: `{id: d.id, name: d.name}` |
+| `l[i]?` | `l[i]`, giving `none` when out of range |
+| `xs.filter p`, `xs.find? p`, `xs.map f` | `xs.filter(p)`, `xs.find(p)`, `xs.map(f)` |
+| `a && b`, `!a`, `==`, `!=` | the same as in JavaScript |
+
+`Proofs.lean` is harder going and you don't need to read the proofs: each theorem's docstring says in English what it shows, and Lean checks the proof when the project builds.
+
 ## Scope
 
 The model covers one slice of the spec, for a single document with same-origin callers:
@@ -25,6 +46,8 @@ The model covers one slice of the spec, for a single document with same-origin c
 - `registerTool()`: Web IDL conversion failures, the validation steps in spec order, schema serialization, and unregistration through the registration signal, including aborting it before the call's promise settles
 - `getTools()`: every registered tool, sorted by name, with the `name`, `title`, `description`, `inputSchema`, `outputSchema` and `annotations` each `Tool` exposes
 - `executeTool()`: lookup by tool id, input serialization and "invalid input", and how each kind of callback outcome becomes a result string or an exception
+
+Author-supplied values (schemas, callback behaviours, inputs) come from small fixed sets, listed in `WebMCP/Model.lean`, not arbitrary JavaScript values.
 
 Not modelled yet: cross-frame and cross-origin exposure (`exposedTo`, `fromOrigins`), events, the execution `signal`, interleavings of calls that run in parallel or from queued tasks, and permissions policy.
 
@@ -41,7 +64,7 @@ From those:
 - **The spec's `executeTool()` assertion always holds** (`execute_assert_name`). When a `Tool`'s registration is still in the tool map, the definition found there has the `Tool`'s name, so the call runs exactly the registration `getTools()` returned.
 - **A `Tool` whose registration is gone can never run anything again** (`stale_handle_not_found`). It fails with `NotFoundError` even if a new tool takes its name. This is the guarantee spec PR #348 introduced the `Tool` interface for.
 - `getTools()` never returns two tools with the same name (`getTools_names_unique`).
-- A rejected `registerTool()` leaves the tool map unchanged (`register_failure_no_effect`).
+- A rejected `registerTool()` leaves the tool map unchanged (`register_err_state`).
 
 ## How implementations are compared
 
@@ -62,16 +85,17 @@ Every implementation can be checked without Lean, against the recorded corpus:
 
 ```
 npm install                                                     # Playwright only
+npx playwright install chromium                                 # its bundled Chromium
 node harness/run.cjs <target> --replay corpus/spec-14b6d53.json
 ```
 
 `<target>` is one of:
 
 - `polyfill:<path to dist/polyfill.js>`: the polyfill, injected into Playwright's Chromium
-- `chromium`: Chromium's native WebMCP, behind `--enable-blink-features=WebMCP`
+- `chromium`: Playwright's bundled Chromium, with its native WebMCP behind `--enable-blink-features=WebMCP`. The rows in RESULTS.md used real Chrome builds, through the next form.
 - `chromium:<path to a chrome binary>`: the same for another build, such as Canary
 
-With Lean 4.25.0 you can also check the proofs, generate fresh traces, and shrink any disagreement to a minimal repro:
+With Lean 4.25.0 (pinned in `lean-toolchain`; no Mathlib) you can also check the proofs, generate fresh traces, and shrink any disagreement to a minimal repro:
 
 ```
 lake build                                          # proofs, examples, oracle

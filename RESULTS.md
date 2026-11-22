@@ -2,22 +2,30 @@
 
 Model at spec 14b6d53. Every target ran the recorded corpus `corpus/spec-14b6d53.json` (1,000 sequences, 6,316 calls) with `--replay`. The polyfill also ran live with fresh seeds and shrinking. Traces are the shortest or shrunk repros the harness found.
 
+Each row comes from, with Playwright 1.63.0:
+
+```
+node harness/run.cjs <target> --replay corpus/spec-14b6d53.json [--known]
+```
+
+where `<target>` is `polyfill:<checkout>/dist/polyfill.js` for the polyfill rows and `chromium:<path to the Chrome binary>` for the Chrome rows.
+
 | Implementation | Result |
 |---|---|
-| Polyfill PR #25 (63ddbfd) | Agrees on every call |
-| Chrome Canary 160.0.8177.0, WebMCP flag on | Agrees on every call except the open spec question #361 (154 results); with `--known`, agrees on all 6,316 |
+| Polyfill [PR #25](https://github.com/w3c-oss/webmcp-polyfill/pull/25) (63ddbfd) | Agrees on every call |
+| Chrome Canary 160.0.8177.0, WebMCP flag on | Agrees on every call except the open spec question [#361](https://github.com/webmachinelearning/webmcp/issues/361) (154 `executeTool()` result strings); with `--known`, agrees on all 6,316 |
 | Polyfill main (4c01562) | 2 divergences, both fixed by PR #25 |
-| Chrome 157.0.8103.80, WebMCP flag on | 4 root causes, all fixed in Canary except #361 |
+| Chrome 157.0.8103.80, WebMCP flag on | #361 plus 3 other root causes, all 3 fixed in Canary |
 | Firefox | Not run. Its implementation exposes an earlier, different API (below). |
 
 ## Polyfill main
 
-1. **`getTools()` returns dictionaries, not `Tool` objects.** Absent `inputSchema`, `outputSchema` and `annotations` come back `undefined` where a `Tool` exposes `null`. *Lagging the spec* (#348), fixed by PR #25.
+1. **`getTools()` returns dictionaries, not `Tool` objects.** Absent `inputSchema`, `outputSchema` and `annotations` come back `undefined` where a `Tool` exposes `null`. *Lagging the spec* ([#348](https://github.com/webmachinelearning/webmcp/pull/348)), fixed by PR #25.
 2. **Stale handle runs the re-registered tool.** Register `c` with a signal, take it from `getTools()`, abort, register a new `c`, then execute the old handle. The spec rejects with `NotFoundError`, but the polyfill runs the new tool, because it looks tools up by name. *Lagging the spec* (#348), fixed by PR #25.
 
 ## Chrome Canary 160
 
-**Result strings aren't JSON-encoded, and `undefined` isn't rejected.** A tool resolving with `"hi"` gives `hi` instead of `"hi"`, one resolving with `""` gives `Operation succeeded` instead of `""`, and one resolving with `undefined` gives `undefined` instead of rejecting with `OperationError`. This is deliberate in Chromium (`ToolFunctionFinishedCallback` in `model_context.cc` stringifies primitives). *Open spec question*: spec issue #361 records this exact disagreement and notes WPT follows Chrome.
+**Result strings aren't JSON-encoded, and `undefined` isn't rejected.** A tool resolving with `"hi"` gives `hi` instead of `"hi"`, one resolving with `""` gives `Operation succeeded` instead of `""`, and one resolving with `undefined` gives `undefined` instead of rejecting with `OperationError`. This is deliberate in Chromium (`ToolFunctionFinishedCallback` in `third_party/blink/renderer/core/script_tools/model_context.cc` stringifies primitives). *Open spec question*: spec issue #361 records this exact disagreement and notes WPT follows Chrome.
 
 Everything else in the slice matches, including the new checks: Web IDL conversion failures before the spec steps, the members `getTools()` exposes (title, schemas after `toJSON()`, annotations with defaults), `DataError` for non-object input, and aborting a registration before its promise settles.
 
@@ -26,7 +34,7 @@ Everything else in the slice matches, including the new checks: Web IDL conversi
 Besides #361:
 
 1. **`outputSchema` and `annotations` are missing.** `getTools()` exposes neither, and an unserializable or non-object `outputSchema` registers fine instead of throwing `TypeError`. That also shows up as `AbortError` or `InvalidStateError` where the spec's `TypeError` comes first. *Version lag*, fixed in Canary.
-2. **`UnknownError` instead of `OperationError` / `NotFoundError`** for a rejected tool and an unregistered tool. The spec switched to specific exceptions in #339. *Version lag*, fixed in Canary.
+2. **`UnknownError` instead of `OperationError` / `NotFoundError`** for a rejected tool and an unregistered tool. The spec switched to specific exceptions in [#339](https://github.com/webmachinelearning/webmcp/pull/339). *Version lag*, fixed in Canary.
 3. **Stale handle runs the re-registered tool**, as in the polyfill above. *Version lag*, fixed in Canary.
 
 ## Firefox
@@ -42,4 +50,11 @@ So most of the current spec isn't there to compare yet. An adapter could map the
 
 ## Reproducing a single trace
 
-Pipe the trace (a JSON array of operations) into `.lake/build/bin/oracle` to get the spec outcomes, or into the harness with `--replay`.
+Pipe a trace (a JSON array of operations) into the oracle to get the outcomes the spec requires. This one is the simplest stale-handle case: register `a` with signal 0, take it from `getTools()`, abort signal 0, execute the old `Tool`.
+
+```
+$ echo '[{"op":"register","name":"a","title":null,"description":"d","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":0},{"op":"getTools"},{"op":"abort","signal":0},{"op":"execute","call":0,"index":0,"input":"obj:1"}]' | .lake/build/bin/oracle
+["ok","tools:a||d|null|null|null","ok","err:NotFoundError"]
+```
+
+`call` and `index` pick the `Tool` by which `getTools()` call returned it and its position in that list.

@@ -27,6 +27,25 @@ for this slice or listed as not covered in the README:
   JavaScript values.
 * Names are compared with `String` order. The spec orders by code units; the two agree on every
   name `validName` accepts, because those are ASCII.
+* `toJSON()` on a schema runs no page script here, so it can't register a tool or detach the
+  document. The second duplicate-name check and the second "fully active" check that
+  `registerTool()` makes after serializing the schemas therefore can't fail, and are omitted.
+* The document is always fully active and allowed to use "tools", so those checks never fail.
+
+## Spec terms and their Lean names
+
+| Spec | Lean |
+|---|---|
+| `ModelContextTool` dictionary (the `registerTool()` argument) | `ToolArgs` |
+| tool definition (a value in the tool map) | `ToolDef` |
+| tool id | `ToolDef.id`, `Handle.id` |
+| `Tool` object returned by `getTools()` | `Handle` (what the caller holds), `ToolView` (what it exposes) |
+| model context (its tool map) | `State` (`State.tools`) |
+| `registerTool()` validation steps | `registerCheck` |
+| unregister a tool (via the registration `signal`) | `abort` |
+| `getTools()` | `getTools` |
+| `executeTool()`, tool execute steps | `execute` |
+| invoke the execute callback | `runTool`, `callbackResult` |
 -/
 namespace WebMCP
 
@@ -315,6 +334,7 @@ def registerCheck (s : State) (t : ToolArgs) (sig : Option Nat) : Option Err :=
   else if t.inputSchema == .unserializable then some .typeError
   else if t.outputSchema == .unserializable then some .typeError
   -- "If options's signal exists and is aborted, reject with its abort reason."
+  -- (`sig` is given and has already been aborted.)
   else if (sig.map s.aborted.contains).getD false then some .abort
   else none
 

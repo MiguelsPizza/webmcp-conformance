@@ -4,8 +4,8 @@ import WebMCP.Model
 # Properties of the model
 
 Each theorem holds for every state reachable from the empty model context and every sequence of
-calls. Several of them discharge an `Assert` step of the spec: they show the assertion can never
-fail, which is exactly what the spec's notes argue in prose.
+calls. One of them (`execute_assert_name`) discharges an `Assert` step of the spec: it shows the
+assertion in `executeTool()` can never fail, which is what the spec's notes argue in prose.
 -/
 namespace WebMCP
 
@@ -193,9 +193,10 @@ theorem getTools_names_unique {s : State} (h : Invariant s) :
     (·.name)).nodup_iff
   simpa [List.map_map, ToolDef.view, sortTools, Function.comp_def] using hp.mpr h.names_unique
 
-/-- A call that fails leaves the model context unchanged (`registerTool()` rejects before it
-    adds anything). -/
-theorem register_failure_no_effect (s : State) (t : ToolArgs) (sig : Option Nat) (e : Err)
+/-- `register` returns the state unchanged when it rejects: `registerTool()` makes every check
+    before it adds anything. (This doesn't hold for `registerAbortSync`, whose `AbortError`
+    comes after the tool was added and removed.) -/
+theorem register_err_state (s : State) (t : ToolArgs) (sig : Option Nat) (e : Err)
     (h : (register s t sig).2 = .err e) : (register s t sig).1 = s := by
   unfold register at h ⊢
   split at h
@@ -315,5 +316,5 @@ end WebMCP
 #guard_msgs in #print axioms WebMCP.execute_assert_name
 /-- info: 'WebMCP.stale_handle_not_found' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms WebMCP.stale_handle_not_found
-/-- info: 'WebMCP.register_failure_no_effect' depends on axioms: [propext, Classical.choice, Quot.sound] -/
-#guard_msgs in #print axioms WebMCP.register_failure_no_effect
+/-- info: 'WebMCP.register_err_state' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms WebMCP.register_err_state
