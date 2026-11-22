@@ -16,6 +16,11 @@ The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a smal
 | [`Main.lean`](Main.lean) | The oracle: JSON traces in, the spec's outcomes out. |
 | [`harness/run.cjs`](harness/run.cjs) | Generates traces, runs them in a browser, compares, shrinks. |
 | [`corpus/`](corpus) | 1,000 recorded traces with expected outcomes, for running without Lean. |
+| [`expectations/`](expectations) | Known divergences per target family (#361, and version lag), counted instead of failing. |
+| [`results/`](results) | Machine-written results of each run: versions, counts, and the trace for each unexpected divergence. |
+| [`repros/`](repros) | One minimal trace per finding in RESULTS.md, with what each implementation does. |
+| [`wpt-export/`](wpt-export), [`tools/export-wpt.cjs`](tools/export-wpt.cjs), [`tools/run-wpt-export.cjs`](tools/run-wpt-export.cjs) | The repros as WPT testharness.js tests (not submitted), and a Playwright runner for them. |
+| [`ReplayTest.lean`](ReplayTest.lean) | `lake test`: replays the corpus and repros through the oracle. |
 | [`spec/anchors.json`](spec/anchors.json), [`tools/check-spec.cjs`](tools/check-spec.cjs) | The spec commit the model reflects, and a hash of each part of `index.bs` it transcribes. |
 
 ## Reading the Lean
@@ -71,7 +76,7 @@ From those:
 - Every call that returns a promise must return one. A synchronous throw is reported as `threw:` and doesn't count as a rejection.
 - An exception matches only if it is a real `DOMException` (or `TypeError`) with the expected name.
 - Each call has a 5-second timeout, so an implementation that never settles a promise shows up as `timeout` instead of hanging the run.
-- `--known` treats the result-serialization differences in spec issue #361 as equal and counts them, so they don't hide other bugs later in the same trace.
+- A divergence listed in `expectations/<family>.json` (such as spec issue #361's result strings) is counted under its id and the trace goes on, so it doesn't hide other bugs later in the same trace. Any other divergence ends that trace, and makes the run exit non-zero. `--no-expectations` counts everything as unexpected.
 
 ## What this does and doesn't guarantee
 
@@ -86,21 +91,30 @@ Every implementation can be checked without Lean, against the recorded corpus:
 ```
 npm install                                                     # Playwright only
 npx playwright install chromium                                 # its bundled Chromium
-node harness/run.cjs <target> --replay corpus/spec-14b6d53.json
+node harness/run.cjs <target> --replay corpus/spec-14b6d53.json [--results results/<label>.json]
+node harness/run.cjs <target> --replay repros/<finding>.json            # one finding
 ```
 
 `<target>` is one of:
 
 - `polyfill:<path to dist/polyfill.js>`: the polyfill, injected into Playwright's Chromium
-- `chromium`: Playwright's bundled Chromium, with its native WebMCP behind `--enable-blink-features=WebMCP`. The rows in RESULTS.md used real Chrome builds, through the next form.
+- `chromium`: Playwright's bundled Chromium (157.0.8103.78 with Playwright 1.63.0), with its native WebMCP behind `--enable-blink-features=WebMCP`. The hand-run rows in RESULTS.md used real Chrome builds, through the next form.
 - `chromium:<path to a chrome binary>`: the same for another build, such as Canary
 
 With Lean 4.36.0 (pinned in `lean-toolchain`; no Mathlib) you can also check the proofs, generate fresh traces, and shrink any disagreement to a minimal repro:
 
 ```
 lake build                                          # proofs, examples, oracle
-node harness/run.cjs <target> [traces=300] [seed=1]
+lake test                                           # corpus and repros still match the model; no browser
+node harness/run.cjs <target> [traces=300] [seed=1] [--results <file>]
 node harness/run.cjs --record <corpus.json> [traces] [seed]   # also prints outcome coverage
+```
+
+To turn the repros into WPT tests and run them (see [`wpt-export/README.md`](wpt-export/README.md)):
+
+```
+node tools/export-wpt.cjs repros/*.json --focus
+node tools/run-wpt-export.cjs <wpt checkout> <target>
 ```
 
 ## Keeping it current
@@ -109,5 +123,5 @@ node harness/run.cjs --record <corpus.json> [traces] [seed]   # also prints outc
 
 1. `lake build`. If a proved property no longer holds, the proof that stops compiling says which one.
 2. `node tools/check-spec.cjs <index.bs> --update <sha>`.
-3. Re-record the corpus.
+3. Re-record the corpus, and refresh the repros' outcomes with `node tools/refresh-repros.cjs`.
 4. Rerun the harness to see which implementations have caught up.
