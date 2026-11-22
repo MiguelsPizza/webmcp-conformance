@@ -1,0 +1,48 @@
+{
+  "spec": "14b6d53",
+  "comment": {
+    "shows": "A tool whose callback rejects makes executeTool() reject with OperationError.",
+    "spec": [
+      "https://webmachinelearning.github.io/webmcp/#invoke-the-execute-callback",
+      "https://webmachinelearning.github.io/webmcp/#tool-execution-error"
+    ],
+    "model": "ok  /  tools:a||d|null|null|null  /  err:OperationError",
+    "observed": {
+      "polyfill main (4c01562)": "ok  /  tools:a||d|undefined|undefined|undefined  /  err:OperationError",
+      "polyfill PR #25 (63ddbfd)": "ok  /  tools:a||d|null|null|null  /  err:OperationError",
+      "Chromium 157.0.8103.78 (Playwright 1.63.0 bundled)": "ok  /  tools:a||d|undefined|undefined|undefined  /  err:UnknownError",
+      "Chrome Canary 160.0.8177.0": "agrees with the model (from the hand run in RESULTS.md, not rerun here)"
+    }
+  },
+  "traces": [
+    {
+      "ops": [
+        {
+          "op": "register",
+          "name": "a",
+          "title": null,
+          "description": "d",
+          "inputSchema": "absent",
+          "outputSchema": "absent",
+          "annotations": null,
+          "behavior": "reject",
+          "signal": null
+        },
+        {
+          "op": "getTools"
+        },
+        {
+          "op": "execute",
+          "call": 0,
+          "index": 0,
+          "input": "obj:1"
+        }
+      ],
+      "want": [
+        "ok",
+        "tools:a||d|null|null|null",
+        "err:OperationError"
+      ]
+    }
+  ]
+}

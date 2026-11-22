@@ -1,0 +1,137 @@
+{
+  "target": "chromium",
+  "browser": "157.0.8103.78",
+  "date": "2026-11-22T23:20:01.566Z",
+  "results": [
+    {
+      "file": "361-empty-string-result.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "A tool resolving with \"\" gives executeTool() the JSON string \"\" (two quote characters).",
+          "status": "FAIL",
+          "message": "assert_equals: expected \"\\\"\\\"\" but got \"Operation succeeded\""
+        }
+      ]
+    },
+    {
+      "file": "361-string-result.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "A tool resolving with the string \"hi\" gives executeTool() its JSON serialization, \"hi\" with quotes.",
+          "status": "FAIL",
+          "message": "assert_equals: expected \"\\\"hi\\\"\" but got \"hi\""
+        }
+      ]
+    },
+    {
+      "file": "361-undefined-result.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "A tool resolving with undefined makes executeTool() reject with OperationError: undefined has no JSON serialization.",
+          "status": "FAIL",
+          "message": "assert_unreached: Should have rejected: undefined Reached unreachable code"
+        }
+      ]
+    },
+    {
+      "file": "absent-members-null.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "A Tool exposes an absent inputSchema, outputSchema and annotations as null, not undefined.",
+          "status": "FAIL",
+          "message": "assert_equals: inputSchema is null when absent expected (object) null but got (undefined) undefined"
+        }
+      ]
+    },
+    {
+      "file": "dataerror-non-object-input.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "Input whose JSON serialization is not an object (here an object whose toJSON() returns 5) makes executeTool() reject with DataError.",
+          "status": "FAIL",
+          "message": "promise_rejects_dom: function \"function() { throw e; }\" threw object \"UnknownError: Failed to parse input arguments\" that is not a DOMException DataError: property \"name\" is equal to \"UnknownError\", expected \"DataError\""
+        }
+      ]
+    },
+    {
+      "file": "outputschema-annotations-exposed.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "A Tool exposes the outputSchema it was registered with, and annotations with every hint defaulted to false.",
+          "status": "FAIL",
+          "message": "assert_equals: expected (string) \"{\\\"type\\\":\\\"object\\\"}\" but got (undefined) undefined"
+        }
+      ]
+    },
+    {
+      "file": "outputschema-validated.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "registerTool() rejects with TypeError when outputSchema can't be serialized to JSON, as it does for inputSchema.",
+          "status": "FAIL",
+          "message": "assert_unreached: Should have rejected: undefined Reached unreachable code"
+        }
+      ]
+    },
+    {
+      "file": "stale-handle.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "A Tool taken from getTools() whose registration was aborted must not run the tool that later reuses its name.",
+          "status": "FAIL",
+          "message": "assert_unreached: Should have rejected: undefined Reached unreachable code"
+        }
+      ]
+    },
+    {
+      "file": "unknownerror-rejected-callback.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "A tool whose callback rejects makes executeTool() reject with OperationError.",
+          "status": "FAIL",
+          "message": "promise_rejects_dom: function \"function() { throw e; }\" threw object \"UnknownError: Tool was executed but the invocation failed. For example, the script function threw an error\" that is not a DOMException OperationError: property \"name\" is equal to \"UnknownError\", expected \"OperationError\""
+        }
+      ]
+    },
+    {
+      "file": "unknownerror-unregistered-tool.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "Executing a Tool whose registration was aborted rejects with NotFoundError.",
+          "status": "FAIL",
+          "message": "promise_rejects_dom: function \"function() { throw e; }\" threw object \"UnknownError: The operation failed for an unknown transient reason (e.g. out of memory).\" that is not a DOMException NotFoundError: property \"code\" is equal to 0, expected 8"
+        }
+      ]
+    }
+  ]
+}

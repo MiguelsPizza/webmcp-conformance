@@ -1,0 +1,151 @@
+{
+  "target": "polyfill:webmcp-polyfill/dist/polyfill.js",
+  "implementation": {
+    "kind": "polyfill",
+    "path": "webmcp-polyfill/dist/polyfill.js",
+    "package": "@w3c/webmcp-polyfill",
+    "version": "0.1.1",
+    "commit": "4c015623254b3a64d28b7c00b81a1672e3b1b5ab",
+    "remote": "https://github.com/webmachinelearning/webmcp-polyfill"
+  },
+  "browser": {
+    "name": "chromium",
+    "version": "157.0.8103.78",
+    "playwright": "1.63.0"
+  },
+  "spec": "14b6d53",
+  "corpus": {
+    "file": "corpus/spec-14b6d53.json",
+    "spec": "14b6d53",
+    "seed": 7,
+    "traces": 1000
+  },
+  "date": "2026-11-22T23:23:34.004Z",
+  "expectations": {
+    "file": "expectations/polyfill.json",
+    "applied": [
+      "polyfill-0.1-absent-members-undefined"
+    ],
+    "skipped": []
+  },
+  "counts": {
+    "traces": 1000,
+    "calls": 6316,
+    "compared": 6316,
+    "agree": 5546,
+    "expected": {
+      "polyfill-0.1-absent-members-undefined": 769
+    },
+    "unexpected": 1
+  },
+  "unexpected": [
+    {
+      "key": "execute: spec err:NotFoundError / impl result",
+      "traces": 1,
+      "trace": [
+        {
+          "op": {
+            "op": "register",
+            "name": "a",
+            "title": "T",
+            "description": "d",
+            "inputSchema": "absent",
+            "outputSchema": "absent",
+            "annotations": null,
+            "behavior": "echo",
+            "signal": 1
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "register",
+            "name": "b",
+            "title": null,
+            "description": "d",
+            "inputSchema": "absent",
+            "outputSchema": "absent",
+            "annotations": null,
+            "behavior": "returnUndefined",
+            "signal": 2
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "getTools"
+          },
+          "model": "tools:a|T|d|null|null|null;b||d|null|null|null",
+          "actual": "tools:a|T|d|undefined|undefined|undefined;b||d|undefined|undefined|undefined"
+        },
+        {
+          "op": {
+            "op": "registerAbortSync",
+            "name": "c",
+            "title": null,
+            "description": "Does a thing.",
+            "inputSchema": "absent",
+            "outputSchema": "absent",
+            "annotations": null,
+            "behavior": "echo",
+            "signal": 0
+          },
+          "model": "err:AbortError",
+          "actual": "err:AbortError"
+        },
+        {
+          "op": {
+            "op": "abort",
+            "signal": 1
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "register",
+            "name": "a",
+            "title": null,
+            "description": "d",
+            "inputSchema": "viaToJSON",
+            "outputSchema": "absent",
+            "annotations": {
+              "readOnlyHint": true
+            },
+            "behavior": "returnNumber",
+            "signal": null
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "register",
+            "name": "t-1",
+            "title": "T",
+            "description": "d",
+            "inputSchema": "object",
+            "outputSchema": "object",
+            "annotations": null,
+            "behavior": "echo",
+            "signal": null
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "execute",
+            "call": 0,
+            "index": 0,
+            "input": "obj:4"
+          },
+          "model": "err:NotFoundError",
+          "actual": "result:5"
+        }
+      ]
+    }
+  ]
+}

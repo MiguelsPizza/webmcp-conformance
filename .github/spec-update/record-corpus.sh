@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Re-record the corpus against the current model and name it after spec commit $1.
 # Keeps the old corpus's seed and trace count, so the diff shows only what the model change did.
-# Also updates the corpus path in README.md. Prints how many traces changed.
+# Also refreshes the expected outcomes in repros/ and updates the corpus path in README.md.
+# Prints how many traces and repros changed.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 spec=$1
@@ -28,3 +29,5 @@ node -e '
 ' "$new" "$spec" "$prev"
 # Point the README's replay commands at the new file.
 sed -i "s#$old#$new#g" README.md
+# Refresh the repros' expected outcomes too, and say which ones the model change moved.
+node tools/refresh-repros.cjs

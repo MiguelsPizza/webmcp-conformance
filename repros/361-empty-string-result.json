@@ -1,0 +1,47 @@
+{
+  "spec": "14b6d53",
+  "comment": {
+    "shows": "A tool resolving with \"\" gives executeTool() the JSON string \"\" (two quote characters).",
+    "spec": [
+      "https://webmachinelearning.github.io/webmcp/#invoke-the-execute-callback"
+    ],
+    "model": "ok  /  tools:a||d|null|null|null  /  result:\"\"",
+    "observed": {
+      "polyfill main (4c01562)": "ok  /  tools:a||d|undefined|undefined|undefined  /  result:\"\"",
+      "polyfill PR #25 (63ddbfd)": "ok  /  tools:a||d|null|null|null  /  result:\"\"",
+      "Chromium 157.0.8103.78 (Playwright 1.63.0 bundled)": "ok  /  tools:a||d|undefined|undefined|undefined  /  result:Operation succeeded",
+      "Chrome Canary 160.0.8177.0": "last call gives result:Operation succeeded (from the hand run in RESULTS.md, not rerun here)"
+    }
+  },
+  "traces": [
+    {
+      "ops": [
+        {
+          "op": "register",
+          "name": "a",
+          "title": null,
+          "description": "d",
+          "inputSchema": "absent",
+          "outputSchema": "absent",
+          "annotations": null,
+          "behavior": "returnEmpty",
+          "signal": null
+        },
+        {
+          "op": "getTools"
+        },
+        {
+          "op": "execute",
+          "call": 0,
+          "index": 0,
+          "input": "obj:1"
+        }
+      ],
+      "want": [
+        "ok",
+        "tools:a||d|null|null|null",
+        "result:\"\""
+      ]
+    }
+  ]
+}

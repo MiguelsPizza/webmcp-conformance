@@ -18,6 +18,8 @@ A person will review your change against the spec diff before it merges, so make
 - `corpus/spec-*.json`: recorded sequences and expected outcomes. Do not edit it; after you
   finish, the workflow re-records it from your model as `corpus/spec-<new commit>.json`, with the
   new commit as its `spec` value, and updates the corpus path in `README.md`.
+- `repros/*.json`: one minimal trace per finding in `RESULTS.md`. Do not edit them either; the
+  workflow refreshes their expected outcomes from your model and reports which ones changed.
 
 ## The spec change
 
