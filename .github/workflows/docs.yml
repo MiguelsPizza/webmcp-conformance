@@ -1,0 +1,66 @@
+name: Docs
+
+# Builds browsable HTML docs for the model with doc-gen4 (docbuild/), uploads them as a workflow
+# artifact, and tries to publish them to GitHub Pages.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install elan and the toolchain
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh \
+            | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+          "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
+      # doc-gen4 and its dependencies take most of the build; they only change with the manifest.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            docbuild/.lake
+            .lake
+          key: docs-${{ hashFiles('lean-toolchain', 'docbuild/lean-toolchain', 'docbuild/lakefile.toml', 'docbuild/lake-manifest.json') }}-${{ hashFiles('**/*.lean') }}
+          restore-keys: docs-${{ hashFiles('lean-toolchain', 'docbuild/lean-toolchain', 'docbuild/lakefile.toml', 'docbuild/lake-manifest.json') }}-
+      - name: Build docs
+        working-directory: docbuild
+        run: lake build WebMCP:docs
+      # The artifact is the reliable output: download it from the run and open index.html.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docs
+          path: docbuild/.lake/build/doc
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docbuild/.lake/build/doc
+
+  # Publishing to Pages needs Pages enabled for the repository (Settings > Pages > Source:
+  # GitHub Actions), which a private repository's plan may not allow. Until it is, this job
+  # fails on its own and continue-on-error keeps the run green; the docs artifact above is
+  # still there.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

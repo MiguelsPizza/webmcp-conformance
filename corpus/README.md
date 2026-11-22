@@ -13,7 +13,7 @@
 }
 ```
 
-`ops` uses the same operations the oracle reads (`Main.lean`), and `want[i]` is the outcome of `ops[i]` in the form the harness compares: `ok`, `err:<exception name>`, `result:<string>`, or `tools:` followed by each `Tool` as `name|title|description|inputSchema|outputSchema|annotations`, joined by `;`.
+`ops` uses the same operations the oracle reads (`WebMCP/Oracle.lean`), and `want[i]` is the outcome of `ops[i]` in the form the harness compares: `ok`, `err:<exception name>`, `result:<string>`, or `tools:` followed by each `Tool` as `name|title|description|inputSchema|outputSchema|annotations`, joined by `;`.
 
 Recording is deterministic: the same model, generator and seed give a byte-identical file. To regenerate after a model change:
 

@@ -1,0 +1,65 @@
+{
+  "spec": "14b6d53",
+  "comment": {
+    "shows": "A Tool taken from getTools() whose registration was aborted must not run the tool that later reuses its name.",
+    "spec": [
+      "https://webmachinelearning.github.io/webmcp/#dom-modelcontext-executetool",
+      "https://webmachinelearning.github.io/webmcp/#tool-interface"
+    ],
+    "model": "ok  /  tools:a||d|null|null|null  /  ok  /  ok  /  err:NotFoundError",
+    "observed": {
+      "polyfill main (4c01562)": "ok  /  tools:a||d|undefined|undefined|undefined  /  ok  /  ok  /  result:\"hi\"",
+      "polyfill PR #25 (63ddbfd)": "ok  /  tools:a||d|null|null|null  /  ok  /  ok  /  err:NotFoundError",
+      "Chromium 157.0.8103.78 (Playwright 1.63.0 bundled)": "ok  /  tools:a||d|undefined|undefined|undefined  /  ok  /  ok  /  result:hi",
+      "Chrome Canary 160.0.8177.0": "agrees with the model (from the hand run in RESULTS.md, not rerun here)"
+    }
+  },
+  "traces": [
+    {
+      "ops": [
+        {
+          "op": "register",
+          "name": "a",
+          "title": null,
+          "description": "d",
+          "inputSchema": "absent",
+          "outputSchema": "absent",
+          "annotations": null,
+          "behavior": "echo",
+          "signal": 0
+        },
+        {
+          "op": "getTools"
+        },
+        {
+          "op": "abort",
+          "signal": 0
+        },
+        {
+          "op": "register",
+          "name": "a",
+          "title": null,
+          "description": "d",
+          "inputSchema": "absent",
+          "outputSchema": "absent",
+          "annotations": null,
+          "behavior": "returnText",
+          "signal": null
+        },
+        {
+          "op": "execute",
+          "call": 0,
+          "index": 0,
+          "input": "obj:1"
+        }
+      ],
+      "want": [
+        "ok",
+        "tools:a||d|null|null|null",
+        "ok",
+        "ok",
+        "err:NotFoundError"
+      ]
+    }
+  ]
+}
