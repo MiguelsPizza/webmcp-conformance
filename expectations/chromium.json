@@ -1,0 +1,53 @@
+{
+  "target": "chromium",
+  "expectations": [
+    {
+      "id": "361-string-result-not-json-encoded",
+      "description": "A tool that resolves with a string gets the string itself back from executeTool(), not its JSON serialization: \"hi\" gives hi. Chromium stringifies primitive results (ToolFunctionFinishedCallback in third_party/blink/renderer/core/script_tools/model_context.cc), and WPT asserts that.",
+      "issue": "https://github.com/webmachinelearning/webmcp/issues/361",
+      "status": "open-spec-question",
+      "match": { "op": "execute", "rewrite": [{ "from": "^result:\"(.+)\"$", "to": "result:$1" }] }
+    },
+    {
+      "id": "361-empty-string-result-operation-succeeded",
+      "description": "A tool that resolves with \"\" gets the string Operation succeeded back instead of the JSON \"\".",
+      "issue": "https://github.com/webmachinelearning/webmcp/issues/361",
+      "status": "open-spec-question",
+      "match": { "op": "execute", "rewrite": [{ "from": "^result:\"\"$", "to": "result:Operation succeeded" }] }
+    },
+    {
+      "id": "361-undefined-result-not-rejected",
+      "description": "A tool that resolves with undefined gets the string undefined back, where the spec rejects with OperationError because undefined has no JSON serialization.",
+      "issue": "https://github.com/webmachinelearning/webmcp/issues/361",
+      "status": "open-spec-question",
+      "match": { "op": "execute", "rewrite": [{ "from": "^err:OperationError$", "to": "result:undefined" }] }
+    },
+    {
+      "id": "chromium-157-tool-members",
+      "description": "getTools() Tools have no outputSchema attribute, and an absent inputSchema or annotations reads as undefined instead of null. Fixed by Chrome Canary 160.0.8177.0. Only the getTools() view is covered: registerTool() also skips outputSchema validation, which changes the tool map, so that stays unexpected.",
+      "issue": "https://github.com/webmachinelearning/webmcp/pull/348",
+      "status": "implementation-lag",
+      "versions": "<160",
+      "match": { "op": "getTools", "rewrite": [
+        { "from": "([^|;]*\\|[^|;]*\\|[^|;]*\\|[^|;]*)\\|[^|;]*(?=\\|[^|;]*(;|$))", "flags": "g", "to": "$1|undefined" },
+        { "from": "\\|null(?=;|\\||$)", "flags": "g", "to": "|undefined" }
+      ] }
+    },
+    {
+      "id": "chromium-157-unknownerror-for-rejected-callback",
+      "description": "A tool whose callback throws or rejects makes executeTool() reject with UnknownError; the spec has used OperationError since webmcp#339. Fixed by Chrome Canary 160.0.8177.0.",
+      "issue": "https://github.com/webmachinelearning/webmcp/pull/339",
+      "status": "implementation-lag",
+      "versions": "<160",
+      "match": { "op": "execute", "rewrite": [{ "from": "^err:OperationError$", "to": "err:UnknownError" }] }
+    },
+    {
+      "id": "chromium-157-unknownerror-for-unregistered-tool",
+      "description": "Executing a Tool whose registration is gone rejects with UnknownError instead of NotFoundError (webmcp#339). Fixed by Chrome Canary 160.0.8177.0.",
+      "issue": "https://github.com/webmachinelearning/webmcp/pull/339",
+      "status": "implementation-lag",
+      "versions": "<160",
+      "match": { "op": "execute", "rewrite": [{ "from": "^err:NotFoundError$", "to": "err:UnknownError" }] }
+    }
+  ]
+}

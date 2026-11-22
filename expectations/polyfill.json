@@ -1,0 +1,13 @@
+{
+  "target": "polyfill",
+  "expectations": [
+    {
+      "id": "polyfill-0.1-absent-members-undefined",
+      "description": "getTools() returns dictionaries rather than Tool objects, so an absent inputSchema, outputSchema or annotations reads as undefined where a Tool exposes null. Fixed by w3c-oss/webmcp-polyfill#25, a breaking change, so expected to ship as 0.2.0.",
+      "issue": "https://github.com/webmachinelearning/webmcp/pull/348",
+      "status": "implementation-lag",
+      "versions": "<0.2.0",
+      "match": { "op": "getTools", "rewrite": [{ "from": "\\|null(?=;|\\||$)", "flags": "g", "to": "|undefined" }] }
+    }
+  ]
+}
