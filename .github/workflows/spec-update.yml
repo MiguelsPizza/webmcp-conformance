@@ -1,0 +1,209 @@
+name: Spec update
+
+# Checks the WebMCP spec for changes to index.bs since the commit in spec/anchors.json, has
+# Claude update the model to match, re-records the corpus, runs the same gate as the Check
+# workflow, and opens a pull request for review. Nothing is pushed to main.
+#
+# Scheduled runs follow webmachinelearning/webmcp main and open at most one pull request at a
+# time. A manual run can point at any branch, commit or open spec PR (pull/<n>/head), in the
+# upstream repo or a fork, to preview what an unmerged spec change does to the model; those open
+# as drafts.
+#
+# Secrets: ANTHROPIC_API_KEY (required). SPEC_UPDATE_TOKEN (optional): a fine-grained token for
+# this repository with Contents and Pull requests read/write. With it, the pull request is opened
+# as you and the Check workflow runs on it; without it, the workflow token is used.
+
+on:
+  schedule:
+    - cron: "17 13 * * *"
+  workflow_dispatch:
+    inputs:
+      spec_ref:
+        description: Spec branch, commit, or pull/<n>/head to model
+        default: main
+      spec_repo:
+        description: Spec repository
+        default: webmachinelearning/webmcp
+
+concurrency:
+  group: spec-update
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  SPEC_REPO: ${{ inputs.spec_repo || 'webmachinelearning/webmcp' }}
+  SPEC_REF: ${{ inputs.spec_ref || 'main' }}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          # Claude's step gets no GitHub credentials; the push step adds them back.
+          persist-credentials: false
+
+      - name: Find the spec change
+        id: spec
+        run: |
+          set -euo pipefail
+          base=$(node -p 'require("./spec/anchors.json").spec')
+          git clone --quiet --filter=blob:none "https://github.com/$SPEC_REPO.git" "$RUNNER_TEMP/spec-repo"
+          cd "$RUNNER_TEMP/spec-repo"
+          git fetch --quiet origin "$SPEC_REF"
+          target=$(git rev-parse FETCH_HEAD)
+          # The modelled commit comes from upstream main, which a fork may not have.
+          git cat-file -e "$base^{commit}" 2>/dev/null \
+            || git fetch --quiet https://github.com/webmachinelearning/webmcp.git main
+          short=$(git rev-parse --short=7 "$target")
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "target=$short" >> "$GITHUB_OUTPUT"
+          # Three dots: the target's own changes since it branched from what's modelled, so an
+          # older spec PR doesn't show up as reverting what landed on main since.
+          if git diff --quiet "$base...$target" -- index.bs; then
+            echo "index.bs is unchanged between $base and $short"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          dir="$RUNNER_TEMP/spec"
+          mkdir -p "$dir"
+          echo "$base -> $short ($SPEC_REPO $SPEC_REF)" > "$dir/range.txt"
+          git log --format='%h %s' "$base..$target" > "$dir/log.txt"
+          git diff "$base...$target" -- index.bs > "$dir/index.bs.diff"
+          # The spec as it would read with the change applied to what's modelled.
+          if tree=$(git merge-tree --write-tree "$base" "$target" 2>/dev/null); then
+            git show "$(head -n1 <<<"$tree"):index.bs" > "$dir/index.bs"
+          else
+            git show "$target:index.bs" > "$dir/index.bs"
+          fi
+          cd "$GITHUB_WORKSPACE"
+          # Which of the spec passages the model transcribes changed (informational for Claude).
+          node tools/check-spec.cjs "$dir/index.bs" > "$dir/anchors.txt" || true
+          cat "$dir/range.txt" "$dir/log.txt" "$dir/anchors.txt"
+
+      - name: Skip if a pull request already covers it
+        id: pr
+        if: steps.spec.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SPEC_UPDATE_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          if [ "$SPEC_REPO" = webmachinelearning/webmcp ] && [ "$SPEC_REF" = main ]; then
+            prefix=spec-update/; draft=false
+          else
+            prefix=spec-preview/; draft=true
+          fi
+          branch="$prefix${{ steps.spec.outputs.target }}"
+          open=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].head.ref')
+          if grep -qx "$branch" <<<"$open" || { [ "$prefix" = spec-update/ ] && grep -q '^spec-update/' <<<"$open"; }; then
+            echo "An open pull request already covers this; merge or close it first."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif gh api "repos/$GITHUB_REPOSITORY/branches/$branch" --silent 2>/dev/null; then
+            echo "Branch $branch exists; delete it to redo this update."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "draft=$draft" >> "$GITHUB_OUTPUT"
+
+      - if: steps.pr.outputs.skip == 'false'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - if: steps.pr.outputs.skip == 'false'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            .lake
+          key: lean-${{ hashFiles('lean-toolchain', 'lakefile.toml', 'lake-manifest.json') }}-${{ hashFiles('**/*.lean') }}
+          restore-keys: lean-${{ hashFiles('lean-toolchain', 'lakefile.toml', 'lake-manifest.json') }}-
+
+      - if: steps.pr.outputs.skip == 'false'
+        run: |
+          .github/spec-update/setup.sh
+          npm install -g @anthropic-ai/claude-code@2.1.323
+
+      - name: Update the model
+        if: steps.pr.outputs.skip == 'false'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SPEC_DIR: ${{ runner.temp }}/spec
+          OUT_DIR: ${{ runner.temp }}/out
+        run: |
+          set -euo pipefail
+          mkdir -p "$OUT_DIR"
+          prompt=$(sed -e "s#\$SPEC_DIR#$SPEC_DIR#g" -e "s#\$OUT_DIR#$OUT_DIR#g" .github/spec-update/prompt.md)
+          claude -p "$prompt" \
+            --model opus \
+            --max-budget-usd 20 \
+            --permission-mode dontAsk \
+            --add-dir "$SPEC_DIR" "$OUT_DIR" \
+            --tools Read Edit Write Glob Grep Bash \
+            --allowedTools Read Edit Write Glob Grep \
+              "Bash(lake build:*)" "Bash(lake env:*)" "Bash(.github/spec-update/check.sh)" \
+              "Bash(node harness/run.cjs:*)" "Bash(echo:*)" "Bash(cat:*)" \
+            --disallowedTools "Bash(git:*)" "Bash(gh:*)" "Bash(curl:*)" WebFetch WebSearch \
+            --settings '{"attribution":false,"includeGitInstructions":false}' \
+            --output-format json > "$RUNNER_TEMP/claude.json" || true
+          node -e 'const r=require(process.argv[1]);console.log(r.subtype||"", "cost $"+(r.total_cost_usd??"?"), "turns", r.num_turns??"?")' "$RUNNER_TEMP/claude.json" || true
+          test -s "$OUT_DIR/pr-body.md" || echo "The model update didn't write a summary; see the workflow log." > "$OUT_DIR/pr-body.md"
+          test -s "$OUT_DIR/pr-title.txt" || echo "Update the model for spec ${{ steps.spec.outputs.target }}" > "$OUT_DIR/pr-title.txt"
+
+      - name: Re-record the corpus and run the gate
+        id: gate
+        if: steps.pr.outputs.skip == 'false'
+        run: |
+          set -uo pipefail
+          # Keep automation files as they are on main, whatever the model update touched.
+          git checkout -- .github && git clean -fdq -- .github
+          spec="$RUNNER_TEMP/spec/index.bs"
+          target="${{ steps.spec.outputs.target }}"
+          {
+            # Record the new commit and passage hashes, then confirm every passage is found and cited.
+            node tools/check-spec.cjs "$spec" --update "$target" >/dev/null
+            anchors=$(node tools/check-spec.cjs "$spec" 2>&1); a=$?
+            echo "$anchors" | sed 's/^/spec anchors: /'
+            echo "corpus: $(.github/spec-update/record-corpus.sh "$target" 2>&1)"
+            .github/spec-update/check.sh 2>&1; c=$?
+            [ "$a" -eq 0 ] && [ "$c" -eq 0 ]
+          } | tee "$RUNNER_TEMP/gate.txt"
+          echo "ok=$([ "${PIPESTATUS[0]}" -eq 0 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Open the pull request
+        if: steps.pr.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.SPEC_UPDATE_TOKEN || github.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+          OUT_DIR: ${{ runner.temp }}/out
+        run: |
+          set -euo pipefail
+          git config user.name "$(git log -1 --format=%an origin/main)"
+          git config user.email "$(git log -1 --format=%ae origin/main)"
+          git switch -c "$BRANCH"
+          git add -A
+          title=$(head -n1 "$OUT_DIR/pr-title.txt")
+          git commit -q -m "$title" -m "Spec ${{ steps.spec.outputs.base }}..${{ steps.spec.outputs.target }} ($SPEC_REPO $SPEC_REF)"
+          git push -q "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$BRANCH"
+          draft=${{ steps.pr.outputs.draft }}
+          [ "${{ steps.gate.outputs.ok }}" = true ] || draft=true
+          {
+            cat "$OUT_DIR/pr-body.md"
+            echo
+            echo "Spec diff: https://github.com/$SPEC_REPO/compare/${{ steps.spec.outputs.base }}...${{ steps.spec.outputs.target }}"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/gate.txt"
+            echo '```'
+          } > "$RUNNER_TEMP/body.md"
+          gh api "repos/$GITHUB_REPOSITORY/pulls" \
+            -f title="$title" -f head="$BRANCH" -f base=main \
+            -F body=@"$RUNNER_TEMP/body.md" -F draft="$draft" --jq .html_url
