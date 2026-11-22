@@ -90,7 +90,7 @@ inductive ToolExecutionError where
   deriving Repr, DecidableEq
 
 /-- A tool execution error's "corresponding exception name", row by row from the spec's table.
-    Spec: #tool-execution-error -/
+    Spec: [#tool-execution-error](https://webmachinelearning.github.io/webmcp/#tool-execution-error) -/
 def ToolExecutionError.exceptionName : ToolExecutionError → Err
   | .toolNotFound         => .notFound
   | .invalidInput         => .dataError
@@ -122,7 +122,7 @@ inductive Schema where
 
 /-- The JSON a `Tool` exposes for a schema that registered successfully: "serialize a tool
     schema" followed by "parse a JSON string to a JavaScript value", or null when absent.
-    Spec: #serialize-a-tool-schema -/
+    Spec: [#serialize-a-tool-schema](https://webmachinelearning.github.io/webmcp/#serialize-a-tool-schema) -/
 def Schema.exposed : Schema → String
   | .object    => "{\"type\":\"object\"}"
   | .viaToJSON => "{\"type\":\"string\"}"
@@ -206,7 +206,7 @@ def Input.keysJSON : Input → String
   | _        => "[\"n\"]"
 
 /-- The arguments to `registerTool()`, as JavaScript values before Web IDL conversion.
-    Spec: #model-context-tool -/
+    Spec: [#model-context-tool](https://webmachinelearning.github.io/webmcp/#model-context-tool) -/
 structure ModelContextTool where
   /-- `name` -/
   name : String
@@ -225,7 +225,7 @@ structure ModelContextTool where
   deriving Repr
 
 /-- The spec's "tool definition" struct, trimmed to what this slice observes.
-    Spec: #tool-definition -/
+    Spec: [#tool-definition](https://webmachinelearning.github.io/webmcp/#tool-definition) -/
 structure ToolDef where
   /-- "tool id": a unique internal value. -/
   id : Nat
@@ -257,7 +257,7 @@ structure ToolObject where
   deriving Repr, DecidableEq
 
 /-- The members of a `Tool` the harness compares, rendered as strings.
-    Spec: #tool-interface -/
+    Spec: [#tool-interface](https://webmachinelearning.github.io/webmcp/#tool-interface) -/
 structure ToolView where
   /-- `name` -/
   name : String
@@ -356,7 +356,7 @@ def converts (t : ModelContextTool) : Bool :=
   t.description.isSome && t.inputSchema != .nonObject && t.outputSchema != .nonObject
 
 /-- The checks of `registerTool()`, in spec order. `none` means the tool is registered.
-    Spec: #dom-modelcontext-registertool -/
+    Spec: [#dom-modelcontext-registertool](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-registertool) -/
 def registerToolChecks (s : State) (t : ModelContextTool) (sig : Option Nat) : Option Err :=
   -- Web IDL dictionary conversion.
   if !converts t then some .typeError
@@ -389,7 +389,7 @@ def addTool (s : State) (t : ModelContextTool) (sig : Option Nat) : State :=
              | none   => s.abortSteps }
 
 /-- `registerTool()`, awaited. The document is fully active and allowed to use "tools".
-    Spec: #dom-modelcontext-registertool -/
+    Spec: [#dom-modelcontext-registertool](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-registertool) -/
 def registerTool (s : State) (t : ModelContextTool) (sig : Option Nat) : State × Outcome :=
   match registerToolChecks s t sig with
   | some e => (s, .err e)
@@ -397,7 +397,7 @@ def registerTool (s : State) (t : ModelContextTool) (sig : Option Nat) : State �
 
 /-- Aborting a registration signal runs its abort steps: "unregister a tool" for each tool it
     registered. A signal aborts at most once.
-    Spec: #model-context-unregister-a-tool -/
+    Spec: [#model-context-unregister-a-tool](https://webmachinelearning.github.io/webmcp/#model-context-unregister-a-tool) -/
 def unregisterBySignal (s : State) (sig : Nat) : State × Outcome :=
   if s.aborted.contains sig then (s, .ok)
   else ({ s with aborted := sig :: s.aborted,
@@ -406,7 +406,7 @@ def unregisterBySignal (s : State) (sig : Nat) : State × Outcome :=
 /-- `registerTool()` followed by aborting its signal before the promise settles. If the tool
     was registered, the abort steps unregister it and reject the promise with the abort reason
     before the queued task can resolve it.
-    Spec: #dom-modelcontext-registertool -/
+    Spec: [#dom-modelcontext-registertool](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-registertool) -/
 def registerAbortSync (s : State) (t : ModelContextTool) (sig : Nat) : State × Outcome :=
   let (s', o) := registerTool s t (some sig)
   let (s'', _) := unregisterBySignal s' sig
@@ -424,7 +424,7 @@ def sortTools (l : List ToolDef) : List ToolDef :=
   l.mergeSort (fun a b => decide (a.name ≤ b.name))
 
 /-- `getTools()`: every tool in the (single, same-origin) document, sorted by name.
-    Spec: #dom-modelcontext-gettools -/
+    Spec: [#dom-modelcontext-gettools](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-gettools) -/
 def getTools (s : State) : State × Outcome :=
   let found := sortTools s.tools
   ({ s with toolObjects := s.toolObjects ++ [found.map fun d => ⟨d.id, d.name⟩] },
@@ -433,7 +433,7 @@ def getTools (s : State) : State × Outcome :=
 /-- How the author's callback settles, after "serializing a JavaScript value to a JSON string"
     for a fulfilled one: the result string, "unserializable result" when that throws, or
     "tool rejected".
-    Spec: #invoke-the-execute-callback -/
+    Spec: [#invoke-the-execute-callback](https://webmachinelearning.github.io/webmcp/#invoke-the-execute-callback) -/
 def callbackResult (b : Behavior) (input : Input) (json : String) :
     Except ToolExecutionError String :=
   match b with
@@ -453,7 +453,7 @@ def callbackResult (b : Behavior) (input : Input) (json : String) :
 
 /-- Run a tool definition's execute steps ("invoke the execute callback"): parse the input, then
     run the author's callback.
-    Spec: #invoke-the-execute-callback -/
+    Spec: [#invoke-the-execute-callback](https://webmachinelearning.github.io/webmcp/#invoke-the-execute-callback) -/
 def invokeExecuteCallback (d : ToolDef) (input : Input) (json : String) :
     Except ToolExecutionError String :=
   -- "If inputObject is not an Object, then run completionSteps given null and invalid input"
@@ -461,7 +461,7 @@ def invokeExecuteCallback (d : ToolDef) (input : Input) (json : String) :
   else callbackResult d.behavior input json
 
 /-- "tool execute steps": look the tool up by its tool id, then run its execute steps.
-    Spec: #tool-execute-steps -/
+    Spec: [#tool-execute-steps](https://webmachinelearning.github.io/webmcp/#tool-execute-steps) -/
 def toolExecuteSteps (s : State) (toolId : Nat) (input : Input) (json : String) :
     Except ToolExecutionError String :=
   -- "If toolMap[toolId] does not exist, then run completionSteps given null and tool not found"
@@ -471,7 +471,7 @@ def toolExecuteSteps (s : State) (toolId : Nat) (input : Input) (json : String) 
 
 /-- `executeTool()`'s `completionSteps`: resolve with the result, or reject with a
     `DOMException` whose name is the error's "corresponding exception name".
-    Spec: #dom-modelcontext-executetool -/
+    Spec: [#dom-modelcontext-executetool](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-executetool) -/
 def completionOutcome : Except ToolExecutionError String → Outcome
   | .ok r    => .result r
   | .error e => .err e.exceptionName
@@ -479,7 +479,7 @@ def completionOutcome : Except ToolExecutionError String → Outcome
 /-- `executeTool()`. Its in-parallel lookup of the tool id and the one in "tool execute steps"
     are merged into `toolExecuteSteps`: with calls awaited one at a time, nothing can unregister
     the tool between them, and both reject with `NotFoundError`.
-    Spec: #dom-modelcontext-executetool -/
+    Spec: [#dom-modelcontext-executetool](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-executetool) -/
 def executeTool (s : State) (call index : Nat) (input : Input) : State × Outcome :=
   match (s.toolObjects[call]?).bind (·[index]?) with
   | none => (s, .invalidRequest)
