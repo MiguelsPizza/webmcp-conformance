@@ -1,0 +1,131 @@
+{
+  "target": "polyfill:polyfill-pr25/dist/polyfill.js",
+  "browser": "157.0.8103.78",
+  "date": "2026-11-22T23:24:59.909Z",
+  "results": [
+    {
+      "file": "executeTool-abort.https.html",
+      "harness": "TIMEOUT",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "executeTool() provides a non-aborted default AbortSignal when called without options",
+          "status": "FAIL",
+          "message": "assert_equals: expected \"success\" but got \"\\\"success\\\"\""
+        },
+        {
+          "name": "caller abort propagates to tool callback options.signal",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "executeTool() with already-aborted tool synchronously rejects",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "executeTool() promise remains rejected even if tool callback resolves after abort",
+          "status": "TIMEOUT",
+          "message": "Test timed out"
+        },
+        {
+          "name": "concurrent executions of the same tool have independent AbortSignals",
+          "status": "NOTRUN",
+          "message": null
+        },
+        {
+          "name": "tool synchronously self-cancelling via caller AbortSignal aborts options.signal and fires toolcancel",
+          "status": "NOTRUN",
+          "message": null
+        },
+        {
+          "name": "tool asynchronously self-cancelling via caller AbortSignal aborts options.signal and fires toolcancel",
+          "status": "NOTRUN",
+          "message": null
+        }
+      ]
+    },
+    {
+      "file": "exposedTo-invalid-origins.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like / in exposedTo",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like * in exposedTo",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like https://example:bogus in exposedTo",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like https://U+d800.com in exposedTo",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like http://example.com in exposedTo",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like ftp://example.com in exposedTo",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like about:blank in exposedTo",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like about:srcdoc in exposedTo",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like https://example.com in exposedTo",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like http://localhost:3000 in exposedTo",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "registerTool() with abort signal reason because signal is processed before `exposedTo`",
+          "status": "PASS",
+          "message": null
+        },
+        {
+          "name": "Aborting a signal from a rejected registration must not unregister a later valid tool with the same name",
+          "status": "FAIL",
+          "message": "assert_equals: Executing the cached RegisteredTool must run callback2 expected \"callback2\" but got \"\\\"callback2\\\"\""
+        }
+      ]
+    },
+    {
+      "file": "object-arguments.https.html",
+      "harness": "OK",
+      "harnessMessage": null,
+      "passed": false,
+      "tests": [
+        {
+          "name": "tool execution requires a JSON Object input argument; and Arrays are Objects",
+          "status": "FAIL",
+          "message": "assert_equals: expected \"Success\" but got \"\\\"Success\\\"\""
+        }
+      ]
+    }
+  ]
+}
