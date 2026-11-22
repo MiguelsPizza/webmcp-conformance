@@ -4,6 +4,7 @@
 #   2. the proofs rest only on Lean's standard axioms
 #   3. the recorded corpus is exactly what the model says, so a model change can't land
 #      without the expected outcomes it implies
+#   4. `lake test`: the corpus and every repro in repros/ replay through the oracle unchanged
 # Prints a short report to stdout and exits non-zero on the first failure.
 set -uo pipefail
 cd "$(dirname "$0")/../.."
@@ -51,3 +52,12 @@ if ! node -e '
   exit 1
 fi
 echo "ok   $corpus matches the model ($count traces, seed $seed)"
+
+# Every recorded trace, in the corpus and in repros/, replays through the oracle unchanged.
+if ! out=$(lake test 2>&1); then
+  grep -vE '^(ok   |✔|info:|Build completed)' <<<"$out"
+  echo "FAIL lake test: a recorded trace no longer matches the model"
+  exit 1
+fi
+files=$(grep -c '^ok   ' <<<"$out")
+echo "ok   lake test ($files trace files in corpus/ and repros/ replay through the oracle)"
