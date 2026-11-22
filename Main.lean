@@ -86,7 +86,7 @@ def main : IO Unit := do
   repeat
     let line ← stdin.getLine
     if line.isEmpty then break
-    if line.trim.isEmpty then continue
+    if line.trimAscii.isEmpty then continue
     let ops ← IO.ofExcept do
       let arr ← (← Json.parse line).getArr?
       arr.toList.mapM parseOp

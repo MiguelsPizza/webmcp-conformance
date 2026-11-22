@@ -95,7 +95,7 @@ node harness/run.cjs <target> --replay corpus/spec-14b6d53.json
 - `chromium`: Playwright's bundled Chromium, with its native WebMCP behind `--enable-blink-features=WebMCP`. The rows in RESULTS.md used real Chrome builds, through the next form.
 - `chromium:<path to a chrome binary>`: the same for another build, such as Canary
 
-With Lean 4.25.0 (pinned in `lean-toolchain`; no Mathlib) you can also check the proofs, generate fresh traces, and shrink any disagreement to a minimal repro:
+With Lean 4.36.0 (pinned in `lean-toolchain`; no Mathlib) you can also check the proofs, generate fresh traces, and shrink any disagreement to a minimal repro:
 
 ```
 lake build                                          # proofs, examples, oracle
