@@ -1,0 +1,60 @@
+{
+  "spec": "14b6d53",
+  "anchors": [
+    {
+      "anchor": "tool-definition",
+      "marker": "A <dfn>tool definition</dfn>",
+      "sha256": "93adb7aa0f403003"
+    },
+    {
+      "anchor": "tool-execution-error",
+      "marker": "A <dfn>tool execution error</dfn>",
+      "sha256": "baaa195cb5d64435"
+    },
+    {
+      "anchor": "tool-execute-steps",
+      "marker": "The <dfn>tool execute steps</dfn>",
+      "sha256": "7729d125dcf6f568"
+    },
+    {
+      "anchor": "invoke-the-execute-callback",
+      "marker": "To <dfn>invoke the execute callback</dfn>",
+      "sha256": "e17f20642abdf09a"
+    },
+    {
+      "anchor": "model-context-unregister-a-tool",
+      "marker": "To <dfn for=\"model context\">unregister a tool</dfn>",
+      "sha256": "18ab5e15101a52ee"
+    },
+    {
+      "anchor": "serialize-a-tool-schema",
+      "marker": "To <dfn>serialize a tool schema</dfn>",
+      "sha256": "9aa09fcaef73a801"
+    },
+    {
+      "anchor": "dom-modelcontext-registertool",
+      "marker": "<dfn method for=ModelContext>registerTool(",
+      "sha256": "81216e1cb309ae49"
+    },
+    {
+      "anchor": "dom-modelcontext-gettools",
+      "marker": "<dfn method for=ModelContext>getTools(",
+      "sha256": "1f012569756db9cc"
+    },
+    {
+      "anchor": "dom-modelcontext-executetool",
+      "marker": "<dfn method for=ModelContext>executeTool(",
+      "sha256": "a0472ad2635a9ce7"
+    },
+    {
+      "anchor": "model-context-tool",
+      "marker": "<h4 id=\"model-context-tool\">",
+      "sha256": "3245daf644f0c0c2"
+    },
+    {
+      "anchor": "tool-interface",
+      "marker": "<h4 id=\"tool-interface\">",
+      "sha256": "e07a32b0107e694c"
+    }
+  ]
+}

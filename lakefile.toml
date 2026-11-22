@@ -1,5 +1,5 @@
 name = "webmcp-conformance"
-defaultTargets = ["oracle"]
+defaultTargets = ["WebMCP", "oracle"]
 
 [[lean_lib]]
 name = "WebMCP"
@@ -7,3 +7,8 @@ name = "WebMCP"
 [[lean_exe]]
 name = "oracle"
 root = "Main"
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+linter.missingDocs = true
