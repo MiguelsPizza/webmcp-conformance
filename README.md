@@ -1,172 +1,79 @@
 # WebMCP conformance: a Lean reference model
 
-An executable model of the [WebMCP spec](https://webmachinelearning.github.io/webmcp/), written in Lean 4, with machine-checked proofs about it and a harness that runs the same randomly generated API-call sequences against WebMCP implementations: today the polyfill and Chromium builds. Each implementation gets compared against the model call by call, and every disagreement is shrunk to a minimal repro.
+An executable model of the [WebMCP spec](https://webmachinelearning.github.io/webmcp/) in Lean 4, with machine-checked proofs about it, and a harness that runs the same random API-call sequences against implementations (today the polyfill and Chromium builds), compares each call with the model, and shrinks every disagreement to a minimal repro.
+The aim is one concrete target for implementers instead of each reading the prose differently. The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a small, readable model that is both executable and the subject of proofs, used as the oracle for differential random testing.
 
-The aim is to give implementers one concrete target instead of each reading the prose differently. See [RESULTS.md](RESULTS.md) for where the polyfill and Chromium stand today.
+## Findings at a glance
 
-The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a small, readable Lean model that is both executable and the subject of proofs, used as the oracle for differential random testing against real implementations.
+Each implementation replayed the recorded corpus of 1,000 sequences (6,146 calls). Details, repros and the full table are in [RESULTS.md](RESULTS.md).
+
+| Implementation | Against the model |
+|---|---|
+| Polyfill [PR #25](https://github.com/w3c-oss/webmcp-polyfill/pull/25) (63ddbfd) | Agrees on 6,123 calls. The other 23 are two bugs: permissions policy checked after the arguments, and duplicate names found late within one script |
+| Polyfill main (4c01562) | Those two, plus two that PR #25 fixes (dictionaries instead of `Tool` objects, and a stale `Tool` running a re-registered tool) and an aborted execution not running its callback, which may be a spec issue |
+| Chrome Canary 160.0.8177.0 (hand run) | Agrees on every call except the open spec question [#361](https://github.com/webmachinelearning/webmcp/issues/361): result strings aren't JSON-encoded |
+| Chromium 157.0.8103.78 (Playwright's) | #361 plus 5 root causes of version lag, all fixed in Canary, and an intermittent hang in one frame |
+| Chrome 157.0.8103.80 (hand run) | #361 plus 4 of those 5 root causes |
+
+Against the official web-platform-tests, 89 of 211 subtests can be translated into the model, and it agrees with every assertion it can express except the 13 that turn on #361 ([wpt/README.md](wpt/README.md)).
+
+## What is claimed and what isn't
+
+- **Proofs** are about the model. They show the spec's algorithms, as transcribed here, keep the properties below; they say nothing directly about any implementation.
+- **Testing** is the link to implementations. A pass means an implementation matched the model on every generated sequence, not that it is correct. The model transcribes spec prose, so each disagreement needs a person to decide whether the implementation, the spec or the model is wrong; when every implementation disagrees the same way, suspect the model or the spec first.
+- **WPT scoring** compares the model with what WPT asserts, through a hand translation recorded subtest by subtest. Where WPT and the spec disagree, the model follows the spec.
+
+## Scope
+
+A fixed frame tree of five documents on three origins (`harnessDocs` in [`WebMCP/Model.lean`](WebMCP/Model.lean)), one of them a cross-origin `<iframe>` that doesn't delegate "tools". The model covers `registerTool()` (Web IDL conversion, validation in spec order, schemas, `exposedTo`, unregistration through the signal, permissions policy), `getTools()` (`fromOrigins`, which documents and tools the caller sees, the members of each `Tool`, order), `executeTool()` (lookup in the `Tool`'s source document, the exposure check, input, results and errors), and calls started from one script before any is awaited (`Op.concurrent`), including aborting an execution's `signal`, with every outcome the spec's ordering allows. Author-supplied values come from small fixed sets.
+
+Not modelled yet: events, the callback's own `signal`, calls from several documents' scripts at once, callbacks that do more than settle or unregister their own tool, navigation and unloading, documents in other traversables, opaque origins, and other frame trees. The header of `Model.lean` lists every simplification.
+
+## What's proved
+
+[`WebMCP/Proofs.lean`](WebMCP/Proofs.lean) proves an invariant for every state reachable by any sequence of calls, in every branch the spec allows for calls in flight (`reachable_invariant`, `concurrent_spec`): names are unique per document, a tool id identifies one registration, every registered tool is valid and lives in a document allowed to use "tools", and every `Tool` object's name, `source` and `origin` match the registration its tool id points to. Every operation but `Op.concurrent` has exactly one outcome (`step_deterministic`). From the invariant:
+
+- **A tool is only discovered by an origin it is exposed to** (`getTools_exposed`): every `Tool` `getTools()` returns comes from a document allowed to use "tools" that is same origin with the caller or in its `fromOrigins`, and is exposed to the caller's origin (`getTools_same_origin`, `getTools_not_from_disallowed`).
+- **A tool never runs for an origin it is not exposed to.** An awaited `executeTool()` on it rejects with `NotAllowedError`, `TypeError` or `NotFoundError` before the callback runs (`executeTool_not_exposed`). Started in an `Op.concurrent` alongside any other calls, it rejects with one of those or `AbortError` in every order, and its queued tool execute steps leave the page unchanged (`concurrent_not_exposed`, `asyncStep_not_exposed`).
+- **The spec's `executeTool()` assertions hold** (`execute_assert_name`): in a document allowed to use "tools", once the input is serialized, the call rejects with `NotFoundError` or runs exactly the registration the `Tool` names, in the document of its `origin`.
+- **The spec's "unregister a tool" assertion holds** (`unregister_assert_exists`), and so does `registerTool()`'s `Assert: signal is not aborted` (`registerTool_assert_signal`).
+- **A `Tool` whose registration is gone never runs anything again** (`stale_tool_not_found`): it fails with `NotFoundError` (or earlier `TypeError`/`NotAllowedError`) whenever it is executed, even if a new tool takes its name.
+- **Unregistration racing execution** (`unregistration_execution_race`): for the script `executeTool(tool, input)` with no `signal`, then aborting the signal `tool`'s registration was made with, then `registerTool(t)` with no `signal` or `exposedTo` (any name, such as the old one), in one document, every order rejects the execution with `NotFoundError` (or an earlier `NotAllowedError` or `TypeError`), settles the abort, and settles the registration as it would right after the unregistration.
+- **Aborting an execution** (`cancel_rejects`): for the script `executeTool(tool, input, {signal})` then `controller.abort()`, in a document allowed to use "tools" and with an input that serializes, every order rejects the call with `AbortError` and settles the abort.
+- **A tool that unregisters itself still completes** (`unregisterSelf_completes`), and is gone afterwards.
+- `getTools()` is sorted by name (`getTools_sorted`, `getTools_names_unique`); a fulfilled `registerTool()` shows up in the next `getTools()` with what was passed in (`registerTool_then_getTools`); aborting a signal removes exactly its tools (`unregisterBySignal_tools`); a rejected `registerTool()` changes nothing (`registerTool_err_state`).
+
+## Running it
+
+Replay the corpus against an implementation, without Lean:
+
+```
+npm install && npx playwright install chromium
+node harness/run.cjs chromium --replay corpus/spec-14b6d53.json   # or polyfill:<path to dist/polyfill.js>
+```
+
+With Lean 4.36.0 (pinned in `lean-toolchain`):
+
+```
+lake test                              # the corpus and repros still match the model; no browser
+bash .github/spec-update/check.sh      # everything the Check workflow runs
+```
 
 ## Layout
 
 | Path | What it is |
 |---|---|
-| [`WebMCP/Model.lean`](WebMCP/Model.lean) | The model. Each definition cites the spec algorithm it transcribes (`Spec: [#anchor](…)`), and the file lists every simplification it makes. |
-| [`WebMCP/Proofs.lean`](WebMCP/Proofs.lean) | Proofs about the model. The build fails if any of them rests on `sorry`. |
-| [`WebMCP/Examples.lean`](WebMCP/Examples.lean) | Hand-written traces with the outcomes the spec requires, including the spec's own examples, checked at build time. |
-| [`WebMCP/Oracle.lean`](WebMCP/Oracle.lean), [`Main.lean`](Main.lean) | The oracle: JSON traces in, the spec's outcomes out. `Oracle.lean` has the wire format, `Main.lean` the loop over stdin. |
-| [`harness/run.cjs`](harness/run.cjs) | Generates traces, runs them in a browser, compares, shrinks. |
-| [`corpus/`](corpus) | 1,000 recorded traces with expected outcomes, for running without Lean. |
-| [`wpt/`](wpt/README.md), [`tools/wpt-score.cjs`](tools/wpt-score.cjs) | The model scored against the official web-platform-tests for WebMCP, across frames, origins and cancellation: 89 of 211 subtests translated to traces, and every assertion the model can express agrees except the 13 that turn on spec issue #361. |
-| [`expectations/`](expectations) | Known divergences per target family (#361, version lag, and polyfill bugs and a possible spec issue found with frames and calls in flight), counted instead of failing. |
-| [`results/`](results) | Machine-written results of each run: versions, counts, and the trace for each unexpected divergence. |
-| [`repros/`](repros) | One minimal trace per finding in RESULTS.md, with what each implementation does. |
-| [`wpt-export/`](wpt-export), [`tools/export-wpt.cjs`](tools/export-wpt.cjs), [`tools/run-wpt-export.cjs`](tools/run-wpt-export.cjs) | The repros as WPT testharness.js tests (not submitted), and a Playwright runner for them. |
-| [`ReplayTest.lean`](ReplayTest.lean) | `lake test`: replays the corpus and repros through the oracle. |
-| [`spec/anchors.json`](spec/anchors.json), [`tools/check-spec.cjs`](tools/check-spec.cjs) | The spec commit the model reflects, and a hash of each part of `index.bs` it transcribes. |
-| [`docbuild/`](docbuild/lakefile.toml) | Builds browsable HTML docs (docstrings, spec quotes, theorem statements) with doc-gen4, kept separate so the main package has no dependencies. |
+| [`WebMCP/Model.lean`](WebMCP/Model.lean) | The model; each definition cites the spec algorithm it transcribes |
+| [`WebMCP/Proofs.lean`](WebMCP/Proofs.lean), [`WebMCP/Examples.lean`](WebMCP/Examples.lean) | The proofs (the build fails on `sorry`), and hand-written traces with the outcomes the spec requires |
+| [`WebMCP/Oracle.lean`](WebMCP/Oracle.lean), [`Main.lean`](Main.lean), [`ReplayTest.lean`](ReplayTest.lean) | The oracle (JSON traces in, the spec's outcomes out) and `lake test` |
+| [`harness/`](harness/run.cjs), [`corpus/`](corpus/README.md), [`expectations/`](expectations/README.md), [`results/`](results/README.md) | The harness, the recorded traces, known divergences per target, and machine-written results |
+| [`repros/`](repros), [`wpt-export/`](wpt-export/README.md) | One minimal trace per finding, and the same as WPT tests |
+| [`wpt/`](wpt/README.md) | The model scored against web-platform-tests |
+| [`spec/anchors.json`](spec/anchors.json), [`tools/`](tools) | The spec commit modelled and a hash of each passage, and the scripts that check them |
 
-## Reading the Lean
+More detail:
 
-You don't need to know Lean to follow `WebMCP/Model.lean` against the spec. Each definition's docstring links the spec algorithm (`Spec: [#anchor](…)`), and each check inside it quotes the step it models. The module doc at the top of the file has a table from spec terms (tool definition, `Tool`, tool id, tool execution error) to Lean names, and [Spec mapping](#spec-mapping) below goes from each spec anchor to its definitions, theorems and examples. The syntax that comes up most:
-
-| Lean | Roughly, in JavaScript |
-|---|---|
-| `def f (s : State) (t : ModelContextTool) : Outcome := ...` | `function f(s, t) { return ... }`, with types |
-| `structure ToolDef where id : Nat ...` | a plain object type with those fields |
-| `inductive Err where \| typeError \| abort ...` | an enum (each case can carry data) |
-| `.err .abort` | `{kind: "err", error: "AbortError"}` |
-| `Except ToolExecutionError String`, `.ok r`, `.error e` | a result `r` or a failure reason `e`, like a settled promise |
-| `Option String`, `some x`, `none` | a value that may be absent: `x` or `null` |
-| `match x with \| some v => a \| none => b` | `x != null ? a : b`, with `v = x` |
-| `{ s with tools := ts }` | `{...s, tools: ts}` |
-| `(·.name)` | `t => t.name` |
-| `⟨d.id, d.name⟩` | build a structure from its fields in order: `{id: d.id, name: d.name}` |
-| `l[i]?` | `l[i]`, giving `none` when out of range |
-| `xs.filter p`, `xs.find? p`, `xs.map f` | `xs.filter(p)`, `xs.find(p)`, `xs.map(f)` |
-| `a && b`, `!a`, `==`, `!=` | the same as in JavaScript |
-
-`Proofs.lean` is harder going and you don't need to read the proofs: each theorem's docstring says in English what it shows, and Lean checks the proof when the project builds.
-
-## Scope
-
-The model covers one slice of the spec, for a fixed frame tree of five documents on three origins (`harnessDocs` in `WebMCP/Model.lean`): a top-level document, a same-origin `<iframe>`, a cross-origin `<iframe>` nested in that, and two cross-origin `<iframe>`s of one origin, only one of which delegates the "tools" feature with `allow="tools"`.
-
-- `registerTool()`: Web IDL conversion failures, the validation steps in spec order, schema serialization, unregistration through the registration signal (including aborting it before the call's promise settles), `exposedTo` parsing and its `SecurityError`, and `NotAllowedError` in a document not allowed to use "tools"
-- `getTools()`: `fromOrigins` parsing, which documents of the frame tree are queried (same origin, or listed in `fromOrigins`, and allowed to use "tools"), which of their tools are exposed to the caller's origin, sorted by name with ties in tree order, with the `name`, `title`, `description`, `inputSchema`, `outputSchema` and `annotations` each `Tool` exposes, and its `source` and `origin`
-- `executeTool()`: lookup by tool id in the `Tool`'s source document, the exposure check against the caller's own origin, input serialization and "invalid input", and how each kind of callback outcome becomes a result string or an exception. A `Tool` can be executed from a document other than the one that discovered it. Its `signal` is modelled for calls in flight together (below).
-- Calls in flight at the same time (`Op.concurrent`): several calls started from one script without awaiting, including aborting registration and execution signals, then awaited together. The model follows which steps run synchronously, which "in parallel" and which in queued tasks, and where the spec leaves their order open it gives every allowed outcome; the harness accepts any of them. This covers `getTools()` racing registration and unregistration, `executeTool()` racing unregistration and re-registration, two executions of a tool that unregisters itself, a registration racing a callback that aborts its signal, and aborting an execution's signal. Every other operation is awaited on its own and has exactly one outcome, as before.
-
-Author-supplied values (schemas, callback behaviours, inputs) come from small fixed sets, listed in `WebMCP/Model.lean`, not arbitrary JavaScript values.
-
-Not modelled yet: events (`toolchange`, `toolactivated`, `toolcancel`) and the callback's own `signal` (so whether a cancelled callback sees its signal abort), calls started from several documents' scripts at once, callbacks that do anything but settle or unregister their own tool, navigation and unloading (every document stays fully active, so "target document unloaded" never happens), documents in other traversables (`executeTool()`'s `InvalidStateError`), opaque origins (`NotSupportedError`), and frame trees other than the harness's.
-
-## What's proved
-
-[`WebMCP/Proofs.lean`](WebMCP/Proofs.lean) proves, for every state reachable by any sequence of calls (`reachable_invariant`):
-
-- tool names stay unique within each document, and a tool id identifies one registration
-- every registered tool has a valid name, a non-empty description, and a registration signal that hasn't fired, and lives in a document allowed to use "tools"
-- every `Tool` object's name and `source` are the name and document of the registration its tool id points to, and its `origin` is that document's origin
-- every abort step on a signal that hasn't fired yet targets a tool that is still registered
-
-These hold in every branch, for every order the spec allows calls in flight together to run in (`reachable_invariant`, `concurrent_spec`), and every operation but `Op.concurrent` has exactly one outcome (`step_deterministic`). From those:
-
-- **A tool is only discovered by an origin it is exposed to** (`getTools_exposed`). Every `Tool` that `getTools()` returns to a document comes from a document allowed to use "tools" that is same origin with the caller or listed in its `fromOrigins`, and the tool is exposed to the caller's origin in the spec's sense ("tool is exposed to an origin": same origin with the tool owner, or listed in its `exposedTo`). With no `fromOrigins`, only same-origin documents' tools come back (`getTools_same_origin`), and never a tool from a document not allowed to use "tools" (`getTools_not_from_disallowed`).
-- **A tool never runs for an origin it is not exposed to** (`executeTool_not_exposed`). If a `Tool`'s registration isn't exposed to the origin of the document calling an awaited `executeTool()`, the call rejects with `NotAllowedError`, `TypeError` or `NotFoundError` before the tool's callback runs, whichever document discovered the `Tool`. The same holds for an `executeTool()` started in an `Op.concurrent` alongside any other calls (`concurrent_not_exposed`): in every allowed order it rejects with one of those or `AbortError`, and its queued tool execute steps leave the page unchanged (`asyncStep_not_exposed`). `executeTool_cases` lists everything an awaited `executeTool()` can do.
-- **The spec's `executeTool()` assertions always hold** (`execute_assert_name`). Once `executeTool()`, in a document allowed to use "tools", has serialized its input, it either rejects with `NotFoundError` or runs the execute steps of a registered definition with the `Tool`'s tool id and name, in a document whose origin is the `Tool`'s `origin`, so the call runs exactly the registration `getTools()` returned.
-- **The spec's "unregister a tool" assertion always holds** (`unregister_assert_exists`). When a registration signal fires for the first time, every tool its abort steps unregister is still in the tool map. The model records those abort steps (`State.abortSteps`) only so this can be stated; no outcome depends on the record.
-- **A `Tool` whose registration is gone can never run anything again** (`stale_tool_not_found`). It fails with `NotFoundError` (or earlier `TypeError`/`NotAllowedError`) whenever it is executed, even if a new tool takes its name. This is the guarantee spec PR #348 introduced the `Tool` interface for.
-- **Unregistration racing execution behaves as the spec's note says** (`unregistration_execution_race`). For the script `executeTool(tool, input)` (no `signal`), then abort the signal `tool`'s registration was made with, then `registerTool(t)` (no `signal` or `exposedTo`, any name, such as the old one), in one document: in every allowed order the execution rejects with `NotFoundError` (or an earlier `NotAllowedError` or `TypeError`), the abort settles, and the registration settles as it would right after the unregistration.
-- **Aborting an execution rejects it** (`cancel_rejects`). For the script `executeTool(tool, input, {signal})` then `controller.abort()`, in a document allowed to use "tools" and with an input that serializes: in every allowed order the call rejects with `AbortError` and the abort settles, whatever the tool does.
-- **A tool that unregisters itself still completes** (`unregisterSelf_completes`), as the note in "unregister a tool" says, and is gone afterwards.
-- `getTools()` lists tools in increasing order of name, strictly so among one document's tools (`getTools_sorted`), so it never returns two with the same name from the same document (`getTools_names_unique`). The order is Lean's `String` order, which is the spec's code-unit order for the ASCII names `registerTool()` accepts.
-- After `registerTool()` fulfills, a `getTools()` call made right after in the same document lists a tool with that name as its own, and its title, description, schemas and annotations are the ones passed in (`registerTool_then_getTools`).
-- Aborting a registration signal removes exactly the tools registered with that signal and keeps every other tool, in order (`unregisterBySignal_tools`).
-- A rejected `registerTool()` leaves the tool map unchanged (`registerTool_err_state`).
-- `registerTool()`'s `Assert: signal is not aborted` holds (`registerTool_assert_signal`). This one follows directly from the check just before it.
-
-## Spec mapping
-
-Where each part of the spec the model transcribes lives in the Lean. Theorems are in [`WebMCP/Proofs.lean`](WebMCP/Proofs.lean); examples are the named `#guard`s in [`WebMCP/Examples.lean`](WebMCP/Examples.lean).
-
-| Spec anchor | Lean definition | Theorems | Examples |
-|---|---|---|---|
-| [`#tool-is-exposed-to-an-origin`](https://webmachinelearning.github.io/webmcp/#tool-is-exposed-to-an-origin) | `toolIsExposed` | `getTools_exposed`, `executeTool_not_exposed`, `concurrent_not_exposed` | `two-sided-opt-in`, `provider-opt-in`, `execute-exposure` |
-| [`#model-context-register-tool-options`](https://webmachinelearning.github.io/webmcp/#model-context-register-tool-options), [`#model-context-get-tool-options`](https://webmachinelearning.github.io/webmcp/#model-context-get-tool-options) | `OriginArg`, `parseOrigins` | | `security`, `provider-opt-in` |
-| [`#permissions-policy`](https://webmachinelearning.github.io/webmcp/#permissions-policy) | `Doc`, `harnessDocs`, `docAllowed` | `getTools_not_from_disallowed` | `not-allowed` |
-| [`#model-context-tool`](https://webmachinelearning.github.io/webmcp/#model-context-tool) | `ModelContextTool`, `converts` | | `validation-order` |
-| [`#tool-definition`](https://webmachinelearning.github.io/webmcp/#tool-definition) | `ToolDef`, `newTool`, `validName` | `reachable_invariant` | `names` |
-| [`#tool-interface`](https://webmachinelearning.github.io/webmcp/#tool-interface) | `ToolObject`, `ToolView`, `ToolDef.view` | `registerTool_then_getTools` | `listed-and-runs` |
-| [`#serialize-a-tool-schema`](https://webmachinelearning.github.io/webmcp/#serialize-a-tool-schema) | `Schema.exposed` | | `sorted`, `schema-before-signal` |
-| [`#dom-modelcontext-registertool`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-registertool) | `registerTool`, `registerToolChecks`, `addTool`, `registerAbortSync` | `registerToolChecks_eq_none`, `registerTool_err_state`, `registerTool_then_getTools`, `registerTool_assert_signal` | `validation-order`, `schema-before-signal`, `abort-before-await`, `names` |
-| [`#model-context-unregister-a-tool`](https://webmachinelearning.github.io/webmcp/#model-context-unregister-a-tool) | `unregisterBySignal`, `callbackEffect` | `unregister_assert_exists`, `unregisterBySignal_tools`, `unregisterSelf_completes` | `unregistration-execution-race`, `abort-before-await`, `self-unregistration`, `register-resolve-race` |
-| [`#dom-modelcontext-gettools`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-gettools) | `getTools`, `requested`, `discover`, `sortTools`; in flight: `Pending.reading`, `callChoices` | `getTools_exposed`, `getTools_same_origin`, `getTools_sorted`, `getTools_names_unique`, `concurrent_spec` | `sorted`, `two-sided-opt-in`, `same-origin-frames`, `getTools-race` |
-| [`#dom-modelcontext-executetool`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-executetool) | `executeTool`, `lookup`, `completionOutcome`; for calls in flight: `concurrent`, `syncAction`, `asyncStep`, `callChoices` | `executeTool_cases`, `executeTool_not_exposed`, `concurrent_not_exposed`, `execute_assert_name`, `stale_tool_not_found`, `unregistration_execution_race`, `cancel_rejects` | `unregistration-execution-race`, `results`, `execute-exposure`, `concurrent-unregistration-execution-race`, `execution-order`, `pending-execution-removal-race` |
-| [`#tool-execute-steps`](https://webmachinelearning.github.io/webmcp/#tool-execute-steps) | `toolExecuteSteps`, `toolExecuteEffect`, `asyncStep` | `stale_tool_not_found`, `unregistration_execution_race` | `unregistration-execution-race`, `concurrent-unregistration-execution-race` |
-| [`#invoke-the-execute-callback`](https://webmachinelearning.github.io/webmcp/#invoke-the-execute-callback) | `invokeExecuteCallback`, `callbackResult` | | `listed-and-runs`, `results` |
-| [`#tool-execution-error`](https://webmachinelearning.github.io/webmcp/#tool-execution-error) | `ToolExecutionError`, `ToolExecutionError.exceptionName` | | `results`, `unregistration-execution-race` |
-
-## How implementations are compared
-
-- Every call that returns a promise must return one. A synchronous throw is reported as `threw:` and doesn't count as a rejection.
-- An exception matches only if it is a real `DOMException` (or `TypeError`) with the expected name.
-- Each call has a 5-second timeout, so an implementation that never settles a promise shows up as `timeout` instead of hanging the run.
-- The harness serves the frame tree from a local HTTP server, with origins 0, 1 and 2 as `http://127.0.0.1:<port A>`, `http://localhost:<port A>` and `http://127.0.0.1:<port B>` (loopback, so potentially trustworthy), and origin 3 as `https://other.example`, which no document has. Each operation runs in the document it names (`doc`), with registration signal `n` belonging to document `n / 3`. A `Tool` is printed with `@<document>` when its `source` is another document's window, and, for operations that name a document, with `!origin=<value>` when its `origin` isn't its source document's.
-- Where the spec allows several outcomes, the expected outcome is `any:` followed by a JSON array of them, and any one matches. A `concurrent` operation's outcome is `all:` followed by a JSON array of its actions' outcomes, compared one by one. The oracle gives each operation the outcomes allowed from any state the earlier operations may have left, so it doesn't check that a later operation's outcome goes with the one an earlier operation actually had.
-- A divergence listed in `expectations/<family>.json` (such as spec issue #361's result strings) is counted under its id and the trace goes on, so it doesn't hide other bugs later in the same trace (or, for one marked `stop` because it leaves the states apart, the trace ends without failing). Where the model allows several outcomes, an expectation may explain any one of them; a `concurrent` operation's actions are matched one by one. Any other divergence ends that trace, and makes the run exit non-zero. `--no-expectations` counts everything as unexpected.
-
-## What this does and doesn't guarantee
-
-- The proofs are about the model. They show the spec's algorithms, as transcribed here, keep those properties. They say nothing directly about any implementation.
-- The link to implementations is testing. A pass means the implementation matched the model on every generated sequence, not that it is correct.
-- The model is a transcription of spec prose. Every disagreement needs a person to decide whether the implementation, the spec, or the model is wrong. When every implementation disagrees with the model the same way, suspect the model or the spec first.
-
-## Running it
-
-Every implementation can be checked without Lean, against the recorded corpus:
-
-```
-npm install                                                     # Playwright only
-npx playwright install chromium                                 # its bundled Chromium
-node harness/run.cjs <target> --replay corpus/spec-14b6d53.json [--results results/<label>.json]
-node harness/run.cjs <target> --replay repros/<finding>.json            # one finding
-```
-
-`<target>` is one of:
-
-- `polyfill:<path to dist/polyfill.js>`: the polyfill, injected into Playwright's Chromium
-- `chromium`: Playwright's bundled Chromium (157.0.8103.78 with Playwright 1.63.0), with its native WebMCP behind `--enable-blink-features=WebMCP`. The hand-run rows in RESULTS.md used real Chrome builds, through the next form.
-- `chromium:<path to a chrome binary>`: the same for another build, such as Canary
-
-With Lean 4.36.0 (pinned in `lean-toolchain`; no Mathlib) you can also check the proofs, generate fresh traces, and shrink any disagreement to a minimal repro:
-
-```
-lake build                                          # proofs, examples, oracle
-lake test                                           # corpus and repros still match the model; no browser
-node harness/run.cjs <target> [traces=300] [seed=1] [--results <file>]
-node harness/run.cjs --record <corpus.json> [traces] [seed]   # also prints outcome coverage
-```
-
-To turn the repros into WPT tests and run them (see [`wpt-export/README.md`](wpt-export/README.md)):
-
-```
-node tools/export-wpt.cjs repros/*.json --focus
-node tools/run-wpt-export.cjs <wpt checkout> <target>
-```
-
-Docs: the same docstrings, spec quotes and theorem statements as HTML pages, built with doc-gen4. The [Docs workflow](.github/workflows/docs.yml) builds them on every push to main and attaches them to the run as the `docs` artifact. Locally (the first build compiles doc-gen4 and takes about 8 minutes; later ones take under a minute):
-
-```
-cd docbuild && DOCGEN_SRC=file lake build WebMCP:docs   # then open .lake/build/doc/WebMCP/Model.html
-```
-
-`DOCGEN_SRC=file` links each declaration to its local source file; leave it out to link to GitHub, which needs an `origin` remote on GitHub.
-
-## Keeping it current
-
-`node tools/check-spec.cjs <path to index.bs>` re-extracts each part of the spec the model transcribes and fails if its text changed since the commit in `spec/anchors.json`. For each changed part, update the definitions that cite it, then:
-
-1. `lake build`. If a proved property no longer holds, the proof that stops compiling says which one.
-2. `node tools/check-spec.cjs <index.bs> --update <sha>`.
-3. Re-record the corpus, and refresh the repros' outcomes with `node tools/refresh-repros.cjs`.
-4. Rerun the harness to see which implementations have caught up.
+- [docs/reading-lean.md](docs/reading-lean.md): reading `Model.lean` without knowing Lean
+- [docs/spec-mapping.md](docs/spec-mapping.md): each spec anchor's definitions, theorems and examples
+- [docs/harness.md](docs/harness.md): targets, generating and shrinking traces, how outcomes are compared, expectations, the WPT export
+- [docs/maintaining.md](docs/maintaining.md): building the HTML docs, and keeping the model current with the spec

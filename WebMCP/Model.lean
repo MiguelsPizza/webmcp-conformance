@@ -143,7 +143,7 @@ def Err.name : Err → String
   | .security     => "SecurityError"
 
 /-- An origin. The model never looks inside one: two origins are same origin exactly when they
-    are equal, and none is opaque. The harness maps each to a real origin (see the README). -/
+    are equal, and none is opaque. The harness maps each to a real origin (see `docs/harness.md`). -/
 abbrev Origin := Nat
 
 /-- A document in the frame tree: its origin, and whether it is allowed to use the "tools"

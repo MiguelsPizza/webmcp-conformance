@@ -5,7 +5,8 @@ import WebMCP.Model
 
 Hand-written traces with the outcomes the spec requires, checked when the library builds.
 A change to an algorithm in the model has to update the readable examples it affects.
-Each example starts with a short name in backticks, which the README's spec mapping refers to.
+Each example starts with a short name in backticks, which the spec mapping
+(`docs/spec-mapping.md`) refers to.
 -/
 namespace WebMCP.Examples
 

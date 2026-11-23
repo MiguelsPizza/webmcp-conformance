@@ -1,0 +1,20 @@
+# Spec mapping
+
+Where each part of the spec the model transcribes lives in the Lean. Theorems are in [`WebMCP/Proofs.lean`](../WebMCP/Proofs.lean); examples are the named `#guard`s in [`WebMCP/Examples.lean`](../WebMCP/Examples.lean).
+
+| Spec anchor | Lean definition | Theorems | Examples |
+|---|---|---|---|
+| [`#tool-is-exposed-to-an-origin`](https://webmachinelearning.github.io/webmcp/#tool-is-exposed-to-an-origin) | `toolIsExposed` | `getTools_exposed`, `executeTool_not_exposed`, `concurrent_not_exposed` | `two-sided-opt-in`, `provider-opt-in`, `execute-exposure` |
+| [`#model-context-register-tool-options`](https://webmachinelearning.github.io/webmcp/#model-context-register-tool-options), [`#model-context-get-tool-options`](https://webmachinelearning.github.io/webmcp/#model-context-get-tool-options) | `OriginArg`, `parseOrigins` | | `security`, `provider-opt-in` |
+| [`#permissions-policy`](https://webmachinelearning.github.io/webmcp/#permissions-policy) | `Doc`, `harnessDocs`, `docAllowed` | `getTools_not_from_disallowed` | `not-allowed` |
+| [`#model-context-tool`](https://webmachinelearning.github.io/webmcp/#model-context-tool) | `ModelContextTool`, `converts` | | `validation-order` |
+| [`#tool-definition`](https://webmachinelearning.github.io/webmcp/#tool-definition) | `ToolDef`, `newTool`, `validName` | `reachable_invariant` | `names` |
+| [`#tool-interface`](https://webmachinelearning.github.io/webmcp/#tool-interface) | `ToolObject`, `ToolView`, `ToolDef.view` | `registerTool_then_getTools` | `listed-and-runs` |
+| [`#serialize-a-tool-schema`](https://webmachinelearning.github.io/webmcp/#serialize-a-tool-schema) | `Schema.exposed` | | `sorted`, `schema-before-signal` |
+| [`#dom-modelcontext-registertool`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-registertool) | `registerTool`, `registerToolChecks`, `addTool`, `registerAbortSync` | `registerToolChecks_eq_none`, `registerTool_err_state`, `registerTool_then_getTools`, `registerTool_assert_signal` | `validation-order`, `schema-before-signal`, `abort-before-await`, `names` |
+| [`#model-context-unregister-a-tool`](https://webmachinelearning.github.io/webmcp/#model-context-unregister-a-tool) | `unregisterBySignal`, `callbackEffect` | `unregister_assert_exists`, `unregisterBySignal_tools`, `unregisterSelf_completes` | `unregistration-execution-race`, `abort-before-await`, `self-unregistration`, `register-resolve-race` |
+| [`#dom-modelcontext-gettools`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-gettools) | `getTools`, `requested`, `discover`, `sortTools`; in flight: `Pending.reading`, `callChoices` | `getTools_exposed`, `getTools_same_origin`, `getTools_sorted`, `getTools_names_unique`, `concurrent_spec` | `sorted`, `two-sided-opt-in`, `same-origin-frames`, `getTools-race` |
+| [`#dom-modelcontext-executetool`](https://webmachinelearning.github.io/webmcp/#dom-modelcontext-executetool) | `executeTool`, `lookup`, `completionOutcome`; for calls in flight: `concurrent`, `syncAction`, `asyncStep`, `callChoices` | `executeTool_cases`, `executeTool_not_exposed`, `concurrent_not_exposed`, `execute_assert_name`, `stale_tool_not_found`, `unregistration_execution_race`, `cancel_rejects` | `unregistration-execution-race`, `results`, `execute-exposure`, `concurrent-unregistration-execution-race`, `execution-order`, `pending-execution-removal-race` |
+| [`#tool-execute-steps`](https://webmachinelearning.github.io/webmcp/#tool-execute-steps) | `toolExecuteSteps`, `toolExecuteEffect`, `asyncStep` | `stale_tool_not_found`, `unregistration_execution_race` | `unregistration-execution-race`, `concurrent-unregistration-execution-race` |
+| [`#invoke-the-execute-callback`](https://webmachinelearning.github.io/webmcp/#invoke-the-execute-callback) | `invokeExecuteCallback`, `callbackResult` | | `listed-and-runs`, `results` |
+| [`#tool-execution-error`](https://webmachinelearning.github.io/webmcp/#tool-execution-error) | `ToolExecutionError`, `ToolExecutionError.exceptionName` | | `results`, `unregistration-execution-race` |
