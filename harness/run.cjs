@@ -172,10 +172,10 @@ const DOCS = [
 // Registration signals belong to the document that uses them: signal n lives in document n/3.
 const SIGNALS_PER_DOC = 3;
 const sameOrigin = (d) => DOCS.flatMap((x, i) => (x.origin === DOCS[d].origin ? [i] : []));
-// Most operations run in the top-level document, so single-document behaviour stays well covered.
+// In a multi-document trace, most operations still run in the top-level document.
 const genDoc = (r) => choose(r, [[10, 0], [3, 1], [2, 2], [3, 3], [1, 4]]);
-const genOrigins = (r) => {
-  if (r() < 0.6) return [];
+const genOrigins = (r, multi) => {
+  if (r() < (multi ? 0.6 : 0.9)) return [];
   const n = 1 + Math.floor(r() * 2);
   return Array.from({ length: n }, () => choose(r, [[3, `origin:${Math.floor(r() * 4)}`],
     [1, `path:${Math.floor(r() * 3)}`], [0.3, "invalid"], [0.3, "insecure"]]));
@@ -184,9 +184,12 @@ const genOrigins = (r) => {
 function genTrace(r) {
   const ops = [];
   const len = 3 + Math.floor(r() * 12);
+  // Half the traces stay in the top-level document, so single-document behaviour stays as well
+  // covered as before frames were modelled; the other half spread over the frame tree.
+  const multi = r() < 0.5;
   for (let i = 0; i < len; i++) {
     const k = r();
-    const doc = genDoc(r);
+    const doc = multi ? genDoc(r) : 0;
     const signal = () => SIGNALS_PER_DOC * doc + Math.floor(r() * SIGNALS_PER_DOC);
     const input = () => {
       const n = Math.floor(r() * 10);
@@ -195,14 +198,14 @@ function genTrace(r) {
     };
     if (k < 0.3) {
       ops.push({ op: "register", ...genTool(r), signal: r() < 0.5 ? signal() : null,
-        exposedTo: genOrigins(r), doc });
+        exposedTo: genOrigins(r, multi), doc });
     } else if (k < 0.33) {
-      ops.push({ op: "registerAbortSync", ...genTool(r), signal: signal(), exposedTo: genOrigins(r), doc });
+      ops.push({ op: "registerAbortSync", ...genTool(r), signal: signal(), exposedTo: genOrigins(r, multi), doc });
     } else if (k < 0.4) {
       ops.push({ op: "abort", signal: signal() });
     } else if (k < 0.58) {
-      ops.push({ op: "getTools", fromOrigins: genOrigins(r), doc });
-    } else if (k < 0.8 || i < 3) {
+      ops.push({ op: "getTools", fromOrigins: genOrigins(r, multi), doc });
+    } else if (k < 0.88 || i < 3) {
       ops.push({ op: "execute", pending: true, input: input(), rc: r(), ri: r(), rd: r() });
     } else {
       // Calls started from one script and awaited together.
@@ -212,11 +215,11 @@ function genTrace(r) {
         const a = r();
         if (a < 0.25) {
           actions.push({ act: "register", ...genTool(r), signal: r() < 0.6 ? signal() : null,
-            exposedTo: genOrigins(r) });
-        } else if (a < 0.45) {
+            exposedTo: genOrigins(r, multi) });
+        } else if (a < 0.4) {
           actions.push({ act: "abort", signal: signal(), aim: r() });
         } else if (a < 0.55) {
-          actions.push({ act: "getTools", fromOrigins: genOrigins(r) });
+          actions.push({ act: "getTools", fromOrigins: genOrigins(r, multi) });
         } else if (a < 0.9 || j === 0) {
           actions.push({ act: "execute", pending: true, input: input(), rc: r(), ri: r(),
             signal: choose(r, [[5, "none"], [3, "live"], [1, "aborted"]]) });

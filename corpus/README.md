@@ -19,6 +19,8 @@ Operations may name the document they run in with `doc` (an index into the frame
 
 A `concurrent` operation starts its `actions` from one script in document `doc` before awaiting any: `register`, `abort`, `getTools` and `execute` (with `signal` `none`, `live` or `aborted`) as above, and `cancel`, which aborts the execution signal of action `target`. Its outcome is `all:` and a JSON array of the actions' outcomes. Each `getTools` action counts as the next `getTools()` call for later `execute`s. Behavior `unregisterSelf` aborts the tool's own registration signal and resolves with its input. Where the spec allows several outcomes for an operation, `want[i]` is `any:` and a JSON array of them.
 
+The current corpus has 1,000 traces and 6,146 operations. Half the traces (499) use the frame tree, with 1,354 operations outside the top-level document; the other half stay in the top-level document, as all traces did before frames were modelled. 450 traces have at least one of the 662 `concurrent` operations, and 44 of those have several allowed outcomes (`any:`). `--record` prints the count of each kind of outcome per operation.
+
 Recording is deterministic: the same model, generator and seed give a byte-identical file. To regenerate after a model change:
 
 ```
