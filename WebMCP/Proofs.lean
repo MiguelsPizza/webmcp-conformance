@@ -3,8 +3,8 @@ import WebMCP.Model
 /-!
 # Properties of the model
 
-Each theorem holds for every state reachable from the empty model context and every sequence of
-calls. Three of them discharge an `Assert` step of the spec, showing it can never fail, which is
+Each theorem holds for every state, or every state satisfying `Invariant` (so every reachable
+one). Three of them discharge an `Assert` step of the spec, showing it can never fail, which is
 what the spec's notes argue in prose: `execute_assert_name` (in `executeTool()`),
 `unregister_assert_exists` (in "unregister a tool") and `registerTool_assert_signal` (in
 `registerTool()`).
@@ -898,6 +898,340 @@ theorem executeTool_not_exposed {s : State} {call k : Nat} {tool : ToolObject}
   · exact .inr (.inr h)
   · rw [hnot d hd hid] at hx; cases hx
 
+/-! ### The exposure check for calls in flight
+
+  `executeTool_not_exposed` is about an awaited call. An `executeTool()` started inside an
+  `Op.concurrent` reaches its queued "tool execute steps" (`asyncStep`) later, after the rest of
+  the script and maybe other tools' callbacks, so the theorems below follow its `Tool` from the
+  call to that task. -/
+
+/-- The queued "tool execute steps" of a `Tool` whose registration is not exposed to the
+    caller's origin leave the page as it was, abort no signal, and settle with `NotFoundError`
+    (or `AbortError`, if the call was cancelled first): the callback never runs. This holds in
+    any state the page has evolved to since the `Tool` was created. -/
+theorem asyncStep_not_exposed {s st : State} (he : Evolves s st) {doc : Nat} {tool : ToolObject}
+    (hlt : tool.id < s.nextId)
+    (hnot : ∀ d ∈ s.tools, d.id = tool.id →
+      toolIsExposed (docOrigin s d.doc) d.exposedOrigins (docOrigin s doc) = false)
+    (x : Input) (json : String) (c cc : Bool) :
+    asyncStep doc st (.executing tool x json c cc) =
+      (st, some (if c then .err .abort else .err .notFound), none) := by
+  simp only [asyncStep]
+  cases hl : lookup st tool.source tool.id with
+  | none => rfl
+  | some d =>
+    obtain ⟨hd, hdoc, hid⟩ := mem_lookup hl
+    have hd' : d ∈ s.tools := by
+      rcases he.tools d hd with hd' | hle
+      · exact hd'
+      · exact absurd (hid ▸ hle) (Nat.not_le.mpr hlt)
+    have hx := hnot d hd' hid
+    rw [hdoc, ← he.docOrigin, ← he.docOrigin] at hx
+    simp [hx]
+
+/-- A call of an `Op.concurrent` that cannot run the callback of `tool`'s registration through
+    another `Tool`: it settled before reaching the tool, or it waits to run `tool` itself. -/
+def NoRun (tool : ToolObject) : Pending → Prop
+  | .settled o => o = .err .notAllowed ∨ o = .err .typeError ∨ o = .err .abort
+  | .invalid => True
+  | .executing t .. => t = tool
+  | _ => False
+
+theorem NoRun.since {tool : ToolObject} {p : Pending} (h : NoRun tool p) (n : Nat) :
+    NoRun tool (p.since n) := by
+  cases p <;> simp_all [Pending.since, NoRun]
+
+theorem syncAction_toolObjects (doc : Nat) (s : State) (ps : List Pending) (a : Action) :
+    (syncAction doc s ps a).1.toolObjects = s.toolObjects := by
+  cases a with
+  | register t sig exp =>
+    simp only [syncAction]; split <;> rfl
+  | abort g => simp only [syncAction, unregisterBySignal]; split <;> rfl
+  | getTools fo => simp only [syncAction]; repeat' split
+                   all_goals rfl
+  | execute c k x sg => simp only [syncAction]; repeat' split
+                        all_goals rfl
+  | cancel k => rfl
+
+/-- The synchronous part of an action changes the earlier calls only by marking a registration
+    aborted or an execution cancelled, so a call that couldn't run another tool still can't. -/
+theorem syncAction_keeps (tool : ToolObject) (doc : Nat) (s : State) (ps : List Pending)
+    (a : Action) :
+    (syncAction doc s ps a).2.2.length = ps.length ∧
+    ∀ (j : Nat) (p : Pending), (syncAction doc s ps a).2.2[j]? = some p →
+      ∃ q, ps[j]? = some q ∧ (NoRun tool q → NoRun tool p) := by
+  cases a with
+  | register t sig exp =>
+    simp only [syncAction]; split <;> exact ⟨rfl, fun j p hp => ⟨p, hp, id⟩⟩
+  | abort g =>
+    simp only [syncAction, List.length_map, List.getElem?_map, true_and]
+    intro j p hp
+    cases hq : ps[j]? with
+    | none => simp [hq] at hp
+    | some q =>
+      simp only [hq, Option.map_some, Option.some.injEq] at hp
+      refine ⟨q, rfl, fun hn => ?_⟩
+      subst hp
+      cases q <;> simp_all [NoRun]
+  | getTools fo =>
+    simp only [syncAction]; repeat' split
+    all_goals exact ⟨rfl, fun j p hp => ⟨p, hp, id⟩⟩
+  | execute c k x sg =>
+    simp only [syncAction]; repeat' split
+    all_goals exact ⟨rfl, fun j p hp => ⟨p, hp, id⟩⟩
+  | cancel k =>
+    simp only [syncAction, List.length_mapIdx, List.getElem?_mapIdx, true_and]
+    intro j p hp
+    cases hq : ps[j]? with
+    | none => simp [hq] at hp
+    | some q =>
+      simp only [hq, Option.map_some, Option.some.injEq] at hp
+      refine ⟨q, rfl, fun hn => ?_⟩
+      subst hp
+      cases q with
+      | executing t x json c cc =>
+        simp only [NoRun] at hn
+        cases c <;> cases cc <;> by_cases hjk : (j == k) = true <;> simp [hjk, NoRun, hn]
+      | _ => simp_all [NoRun]
+
+/-- `executeTool(tool)` started in a script can't run another tool's callback. -/
+theorem syncAction_execute_noRun {s : State} {call k : Nat} {tool : ToolObject}
+    (ht : (s.toolObjects[call]?).bind (·[k]?) = some tool) (doc : Nat) (ps : List Pending)
+    (x : Input) (sg : ExecSignal) :
+    NoRun tool (syncAction doc s ps (.execute call k x sg)).2.1 := by
+  simp only [syncAction, ht]
+  repeat' split
+  all_goals simp [NoRun]
+
+/-- Every `executeTool(tool)` of the script ends it unable to run another tool's callback. -/
+theorem syncPhase_noRun {doc : Nat} {T : List (List ToolObject)} {call k : Nat}
+    {tool : ToolObject} (ht : (T[call]?).bind (·[k]?) = some tool) (as0 : List Action) :
+    ∀ (as pre : List Action) (s : State) (ps : List Pending) (hist : List State),
+      s.toolObjects = T → as0 = pre ++ as → pre.length = ps.length →
+      (∀ (j : Nat) (p : Pending) (x : Input) (sg : ExecSignal),
+        as0[j]? = some (Action.execute call k x sg) → ps[j]? = some p → NoRun tool p) →
+      ∀ (j : Nat) (p : Pending) (x : Input) (sg : ExecSignal),
+        as0[j]? = some (Action.execute call k x sg) →
+        (syncPhase doc s ps hist as).2.1[j]? = some p → NoRun tool p := by
+  intro as
+  induction as with
+  | nil => intro pre s ps hist _ _ _ hps; simpa [syncPhase] using hps
+  | cons a as ih =>
+    intro pre s ps hist hT has hlen hps
+    obtain ⟨hlen', hkeep⟩ := syncAction_keeps tool doc s ps a
+    rcases hsa : syncAction doc s ps a with ⟨s', p, ps'⟩
+    rw [hsa] at hlen' hkeep
+    simp only at hlen' hkeep
+    have hT' : s'.toolObjects = T := by
+      have := syncAction_toolObjects doc s ps a; rw [hsa] at this; exact this.trans hT
+    simp only [syncPhase, hsa]
+    refine ih (pre ++ [a]) s' (ps' ++ [p.since hist.length]) (hist ++ [s]) hT'
+      (by simp [has]) (by simp [hlen, hlen']) ?_
+    intro j q x sg hj hq
+    by_cases hlt : j < ps'.length
+    · rw [List.getElem?_append_left hlt] at hq
+      obtain ⟨q0, hq0, himp⟩ := hkeep j q hq
+      exact himp (hps j q0 x sg hj hq0)
+    · rw [List.getElem?_append_right (Nat.le_of_not_lt hlt)] at hq
+      cases hd : j - ps'.length with
+      | succ n => simp [hd] at hq
+      | zero =>
+        simp only [hd, List.getElem?_cons_zero, Option.some.injEq] at hq
+        subst hq
+        have hj' : j = pre.length := by omega
+        have ha : a = .execute call k x sg := by
+          rw [has, hj', List.getElem?_append_right (Nat.le_refl _), Nat.sub_self] at hj
+          simpa using hj
+        subst ha
+        have := syncAction_execute_noRun (hT ▸ ht) doc ps x sg
+        rw [hsa] at this
+        exact this.since _
+
+/-- The tasks of an `Op.concurrent` settle an `executeTool(tool)` whose registration is not
+    exposed to the caller's origin with `NotFoundError` or `AbortError`. -/
+theorem asyncPhase_not_exposed {s : State} {doc : Nat} {tool : ToolObject}
+    (hlt : tool.id < s.nextId)
+    (hnot : ∀ d ∈ s.tools, d.id = tool.id →
+      toolIsExposed (docOrigin s d.doc) d.exposedOrigins (docOrigin s doc) = false)
+    {ps : List Pending} (order : List Nat) :
+    ∀ st, Invariant st → Evolves s st → ∀ j o, (j, o) ∈ (asyncPhase doc ps st order).2.1 →
+      ∀ x json c cc, ps[j]? = some (.executing tool x json c cc) →
+        o = .err .abort ∨ o = .err .notFound := by
+  induction order with
+  | nil => intro st _ _ j o hm; simp [asyncPhase] at hm
+  | cons i is ih =>
+    intro st hi he j o hm x json c cc hj
+    obtain ⟨hi', he'⟩ := asyncStep_spec hi doc (ps[i]?.getD .invalid)
+    rcases has : asyncStep doc st (ps[i]?.getD .invalid) with ⟨s', o', g⟩
+    rw [has] at hi' he'
+    simp only [asyncPhase, has, List.mem_append] at hm
+    rcases hm with hm | hm
+    · cases o' with
+      | none => simp at hm
+      | some o'' =>
+        simp only [Option.map_some, Option.getD_some, List.mem_singleton, Prod.mk.injEq] at hm
+        obtain ⟨rfl, rfl⟩ := hm
+        rw [hj, Option.getD_some, asyncStep_not_exposed he hlt hnot] at has
+        simp only [Prod.mk.injEq, Option.some.injEq] at has
+        obtain ⟨-, rfl, -⟩ := has
+        split <;> simp
+    · exact ih s' hi' (he.trans he') j o hm x json c cc hj
+
+/-- Every waiting `executeTool()` whose index is in `order` gets an outcome. -/
+theorem asyncPhase_settles {doc : Nat} {ps : List Pending} (order : List Nat) :
+    ∀ st i, i ∈ order → ∀ tool x json c cc, ps[i]? = some (.executing tool x json c cc) →
+      ∃ o, (i, o) ∈ (asyncPhase doc ps st order).2.1 := by
+  induction order with
+  | nil => intro st i hi; cases hi
+  | cons j is ih =>
+    intro st i hi tool x json c cc hps
+    rcases has : asyncStep doc st (ps[j]?.getD .invalid) with ⟨s', o', g⟩
+    simp only [asyncPhase, has, List.mem_append]
+    by_cases hij : i = j
+    · subst hij
+      rw [hps, Option.getD_some] at has
+      simp only [asyncStep] at has
+      cases o' with
+      | none => simp at has
+      | some o'' => exact ⟨o'', .inl (by simp)⟩
+    · rcases List.mem_cons.mp hi with rfl | hi
+      · exact absurd rfl hij
+      · obtain ⟨o, ho⟩ := ih s' i hi tool x json c cc hps
+        exact ⟨o, .inr ho⟩
+
+theorem mem_insertEverywhere {x : Nat} {l o : List Nat} (h : o ∈ insertEverywhere x l) :
+    x ∈ o ∧ ∀ y ∈ l, y ∈ o := by
+  induction l generalizing o with
+  | nil => simp [insertEverywhere] at h; subst h; simp
+  | cons y ys ih =>
+    simp only [insertEverywhere, List.mem_cons, List.mem_map] at h
+    rcases h with rfl | ⟨o', ho', rfl⟩
+    · exact ⟨List.mem_cons_self, fun z hz => List.mem_cons_of_mem _ hz⟩
+    · obtain ⟨hx, hys⟩ := ih ho'
+      refine ⟨List.mem_cons_of_mem _ hx, fun z hz => ?_⟩
+      rcases List.mem_cons.mp hz with rfl | hz
+      · exact List.mem_cons_self
+      · exact List.mem_cons_of_mem _ (hys z hz)
+
+theorem mem_orders {l o : List Nat} (h : o ∈ orders l) : ∀ y ∈ l, y ∈ o := by
+  induction l generalizing o with
+  | nil => intro y hy; cases hy
+  | cons x xs ih =>
+    simp only [orders, List.mem_flatMap] at h
+    obtain ⟨o', ho', ho⟩ := h
+    obtain ⟨hx, hxs⟩ := mem_insertEverywhere ho
+    intro y hy
+    rcases List.mem_cons.mp hy with rfl | hy
+    · exact hx
+    · exact hxs y (ih ho' y hy)
+
+theorem lookup_of_mem {l : List (Nat × Outcome)} {i : Nat} {o : Outcome} (h : (i, o) ∈ l) :
+    ∃ o', l.lookup i = some o' ∧ (i, o') ∈ l := by
+  induction l with
+  | nil => cases h
+  | cons e es ih =>
+    rcases e with ⟨k, b⟩
+    by_cases hk : i = k
+    · subst hk; exact ⟨b, by simp [List.lookup], List.mem_cons_self⟩
+    · have hne : (i == k) = false := by simpa using hk
+      rcases List.mem_cons.mp h with h | h
+      · simp only [Prod.mk.injEq] at h; exact absurd h.1 hk
+      · obtain ⟨o', ho', hm⟩ := ih h
+        exact ⟨o', by simp [List.lookup, hne, ho'], List.mem_cons_of_mem _ hm⟩
+
+theorem choices_getElem? {α : Type} {L : List (List α)} {picked : List α}
+    (h : picked ∈ choices L) {i : Nat} {x : α} (hx : picked[i]? = some x) :
+    ∃ l, L[i]? = some l ∧ x ∈ l := by
+  induction L generalizing picked i with
+  | nil => simp [choices] at h; subst h; simp at hx
+  | cons c cs ih =>
+    simp only [choices, List.mem_flatMap, List.mem_map] at h
+    obtain ⟨y, hy, rest, hrest, rfl⟩ := h
+    cases i with
+    | zero => simp at hx; subst hx; exact ⟨c, rfl, hy⟩
+    | succ n => simpa using ih hrest (by simpa using hx)
+
+/-- **A tool never runs for an origin it is not exposed to, even with calls in flight.** If the
+    registration a `Tool` identifies is not exposed to the origin of document `doc`, then an
+    `executeTool()` on it started from `doc`'s script in an `Op.concurrent`, together with any
+    other calls (registrations, aborts, `getTools()`, other executions, cancellations), settles
+    in every allowed order with `NotAllowedError`, `TypeError`, `AbortError` or `NotFoundError`.
+    Its queued tool execute steps leave the page unchanged (`asyncStep_not_exposed`), so the
+    tool's `execute` callback never runs there. -/
+theorem concurrent_not_exposed {s : State} (h : Invariant s) {call k : Nat} {tool : ToolObject}
+    (ht : (s.toolObjects[call]?).bind (·[k]?) = some tool) (doc : Nat)
+    (hnot : ∀ d ∈ s.tools, d.id = tool.id →
+      toolIsExposed (docOrigin s d.doc) d.exposedOrigins (docOrigin s doc) = false)
+    (as : List Action) {i : Nat} {x : Input} {sg : ExecSignal}
+    (hi : as[i]? = some (.execute call k x sg)) :
+    ∀ p ∈ concurrent s as doc, ∀ os, p.2 = .all os → ∀ o, os[i]? = some o →
+      o = .err .notAllowed ∨ o = .err .typeError ∨ o = .err .abort ∨ o = .err .notFound := by
+  have hlt : tool.id < s.nextId := by
+    cases hc : s.toolObjects[call]? with
+    | none => simp [hc] at ht
+    | some ts =>
+      simp only [hc, Option.bind_some] at ht
+      exact h.toolObjects_issued ts (List.mem_of_getElem? hc) tool (List.mem_of_getElem? ht)
+  intro p hp os hos o ho
+  obtain ⟨hiE, -, -⟩ := syncPhase_spec (doc := doc) (ps := []) (hist := []) as h
+  have hnr := syncPhase_noRun (doc := doc) ht as as [] s [] [] rfl rfl rfl (by simp)
+  unfold concurrent at hp
+  rcases hsync : syncPhase doc s [] [] as with ⟨sEnd, ps, hist⟩
+  rw [hsync] at hiE hnr
+  simp only [hsync] at hp
+  split at hp
+  · simp only [List.mem_singleton] at hp; subst hp; cases hos
+  rename_i hnoinv
+  simp only [List.mem_flatMap, List.mem_map] at hp
+  obtain ⟨order, horder, picked, hpicked, rfl⟩ := hp
+  simp only [Outcome.all.injEq] at hos
+  subst hos
+  rw [List.getElem?_map] at ho
+  cases hpi : picked[i]? with
+  | none => simp [hpi] at ho
+  | some pr =>
+    simp only [hpi, Option.map_some, Option.some.injEq] at ho
+    subst ho
+    obtain ⟨l, hl, hpr⟩ := choices_getElem? hpicked hpi
+    rw [List.getElem?_map] at hl
+    have hilt : i < ps.length := by
+      rcases Nat.lt_or_ge i ps.length with hilt | hge
+      · exact hilt
+      · rw [List.getElem?_eq_none (by simpa using hge)] at hl
+        simp at hl
+    rw [List.getElem?_range hilt] at hl
+    simp only [Option.map_some, Option.some.injEq] at hl
+    subst hl
+    have hps : ps[i]? = some ps[i] := List.getElem?_eq_getElem hilt
+    have hq := hnr i ps[i] x sg hi hps
+    rw [hps, Option.getD_some] at hpr
+    generalize ps[i] = q at hq hpr hps
+    cases q with
+    | settled o' =>
+      simp only [callChoices, List.mem_singleton] at hpr
+      subst hpr
+      rcases hq with hq | hq | hq <;> simp [hq]
+    | readFailed | registered | reading => cases hq
+    | invalid =>
+      exact absurd (List.any_eq_true.mpr ⟨_, List.mem_of_getElem? hps, rfl⟩) hnoinv
+    | executing t x' json c cc =>
+      simp only [NoRun] at hq
+      subst hq
+      simp only [callChoices, List.mem_singleton] at hpr
+      subst hpr
+      have hiw : i ∈ (List.range ps.length).filter fun j =>
+          match ps[j]? with | some (.executing ..) => true | _ => false := by
+        exact List.mem_filter.mpr ⟨List.mem_range.mpr hilt, by simp [hps]⟩
+      obtain ⟨o1, ho1⟩ := asyncPhase_settles (doc := doc) order sEnd i (mem_orders horder i hiw)
+        t x' json c cc hps
+      obtain ⟨o', hlk, hm⟩ := lookup_of_mem ho1
+      simp only [hlk, Option.getD_some]
+      have heE : Evolves s sEnd := by
+        have := (syncPhase_spec (doc := doc) (ps := []) (hist := []) as h).2.1
+        rw [hsync] at this; exact this
+      rcases asyncPhase_not_exposed hlt hnot order sEnd hiE heE i o' hm x' json c cc hps with
+        hr | hr <;> simp [hr]
+
 /-- The spec's `Assert: tool definition's name is tool's name` and `Assert: targetOrigin is same
     origin with expectedTargetOrigin` in `executeTool()`. Once `executeTool()` on a `Tool` gets
     past serializing its input, it either rejects with `NotFoundError` or runs the execute steps
@@ -1122,3 +1456,13 @@ end WebMCP
 #guard_msgs in #print axioms WebMCP.unregisterSelf_completes
 /-- info: 'WebMCP.step_deterministic' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms WebMCP.step_deterministic
+/-- info: 'WebMCP.concurrent_spec' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms WebMCP.concurrent_spec
+/-- info: 'WebMCP.executeTool_cases' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms WebMCP.executeTool_cases
+/-- info: 'WebMCP.registerToolChecks_eq_none' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms WebMCP.registerToolChecks_eq_none
+/-- info: 'WebMCP.concurrent_not_exposed' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms WebMCP.concurrent_not_exposed
+/-- info: 'WebMCP.asyncStep_not_exposed' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms WebMCP.asyncStep_not_exposed
