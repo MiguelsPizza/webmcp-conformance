@@ -17,7 +17,7 @@
     "seed": 7,
     "traces": 1000
   },
-  "date": "2026-11-22T23:12:18.568Z",
+  "date": "2026-11-23T00:19:44.028Z",
   "expectations": {
     "file": "expectations/chromium.json",
     "applied": [
@@ -32,37 +32,80 @@
   },
   "counts": {
     "traces": 1000,
-    "calls": 6316,
-    "compared": 5560,
-    "agree": 4395,
+    "calls": 6146,
+    "compared": 5487,
+    "agree": 4398,
     "expected": {
-      "361-string-result-not-json-encoded": 52,
-      "361-empty-string-result-operation-succeeded": 31,
-      "361-undefined-result-not-rejected": 36,
-      "chromium-157-tool-members": 684,
-      "chromium-157-unknownerror-for-rejected-callback": 123,
-      "chromium-157-unknownerror-for-unregistered-tool": 26
+      "361-string-result-not-json-encoded": 36,
+      "361-empty-string-result-operation-succeeded": 37,
+      "361-undefined-result-not-rejected": 59,
+      "chromium-157-tool-members": 657,
+      "chromium-157-unknownerror-for-rejected-callback": 101,
+      "chromium-157-unknownerror-for-unregistered-tool": 51
     },
-    "unexpected": 213
+    "unexpected": 197
   },
   "unexpected": [
     {
+      "key": "registerAbortSync: spec err:TypeError / impl err:NotAllowedError",
+      "traces": 1,
+      "trace": [
+        {
+          "op": {
+            "op": "abort",
+            "signal": 9
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [
+              "insecure",
+              "path:1"
+            ],
+            "doc": 1
+          },
+          "model": "err:SecurityError",
+          "actual": "err:SecurityError"
+        },
+        {
+          "op": {
+            "op": "registerAbortSync",
+            "name": "a",
+            "title": null,
+            "description": "d",
+            "inputSchema": "viaToJSON",
+            "outputSchema": "nonObject",
+            "annotations": null,
+            "behavior": "unregisterSelf",
+            "signal": 12,
+            "exposedTo": [],
+            "doc": 4
+          },
+          "model": "err:TypeError",
+          "actual": "err:NotAllowedError"
+        }
+      ]
+    },
+    {
       "key": "register: spec err:TypeError / impl ok",
-      "traces": 122,
+      "traces": 104,
       "trace": [
         {
           "op": {
             "op": "register",
-            "name": "c",
-            "title": "T",
+            "name": "b",
+            "title": null,
             "description": "d",
             "inputSchema": "absent",
-            "outputSchema": "unserializable",
-            "annotations": {
-              "readOnlyHint": true
-            },
-            "behavior": "echo",
-            "signal": null
+            "outputSchema": "nonObject",
+            "annotations": null,
+            "behavior": "returnUndefined",
+            "signal": 1,
+            "exposedTo": [],
+            "doc": 0
           },
           "model": "err:TypeError",
           "actual": "ok"
@@ -70,13 +113,176 @@
       ]
     },
     {
-      "key": "register: spec err:TypeError / impl err:AbortError",
-      "traces": 20,
+      "key": "execute: spec err:DataError / impl err:UnknownError",
+      "traces": 14,
+      "trace": [
+        {
+          "op": {
+            "op": "register",
+            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "title": "",
+            "description": "d",
+            "inputSchema": "absent",
+            "outputSchema": "object",
+            "annotations": null,
+            "behavior": "echo",
+            "signal": null,
+            "exposedTo": [],
+            "doc": 0
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
+          },
+          "model": "tools:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx||d|null|{\"type\":\"object\"}|null",
+          "actual": "tools:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx||d|undefined|undefined|undefined@undefined"
+        },
+        {
+          "op": {
+            "op": "execute",
+            "call": 0,
+            "index": 0,
+            "input": "toJSONNumber",
+            "doc": 0
+          },
+          "model": "err:DataError",
+          "actual": "err:UnknownError"
+        }
+      ]
+    },
+    {
+      "key": "register: spec err:TypeError / impl err:InvalidStateError",
+      "traces": 12,
+      "trace": [
+        {
+          "op": {
+            "op": "register",
+            "name": "ünï",
+            "title": null,
+            "description": "d",
+            "inputSchema": "object",
+            "outputSchema": "nonObject",
+            "annotations": null,
+            "behavior": "returnText",
+            "signal": 1,
+            "exposedTo": [],
+            "doc": 0
+          },
+          "model": "err:TypeError",
+          "actual": "err:InvalidStateError"
+        }
+      ]
+    },
+    {
+      "key": "concurrent: spec all / impl all",
+      "traces": 33,
+      "trace": [
+        {
+          "op": {
+            "op": "concurrent",
+            "actions": [
+              {
+                "act": "register",
+                "name": "tool.x",
+                "title": null,
+                "description": "d",
+                "inputSchema": "absent",
+                "outputSchema": "object",
+                "annotations": null,
+                "behavior": "returnEmpty",
+                "signal": null,
+                "exposedTo": [
+                  "origin:2"
+                ]
+              },
+              {
+                "act": "abort",
+                "signal": 0
+              },
+              {
+                "act": "register",
+                "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "title": "T",
+                "description": "d",
+                "inputSchema": "viaToJSON",
+                "outputSchema": "unserializable",
+                "annotations": null,
+                "behavior": "reject",
+                "signal": 1,
+                "exposedTo": [
+                  "origin:1",
+                  "origin:0"
+                ]
+              },
+              {
+                "act": "abort",
+                "signal": 0
+              }
+            ],
+            "doc": 0
+          },
+          "model": "all:[\"ok\",\"ok\",\"err:TypeError\",\"ok\"]",
+          "actual": "all:[\"ok\",\"ok\",\"ok\",\"ok\"]"
+        }
+      ]
+    },
+    {
+      "key": "register: spec err:TypeError / impl err:SecurityError",
+      "traces": 10,
+      "trace": [
+        {
+          "op": {
+            "op": "register",
+            "name": "c",
+            "title": "Tïtle",
+            "description": "d",
+            "inputSchema": "viaToJSON",
+            "outputSchema": "nonObject",
+            "annotations": {
+              "readOnlyHint": true
+            },
+            "behavior": "echo",
+            "signal": null,
+            "exposedTo": [
+              "insecure"
+            ],
+            "doc": 0
+          },
+          "model": "err:TypeError",
+          "actual": "err:SecurityError"
+        }
+      ]
+    },
+    {
+      "key": "registerAbortSync: spec err:TypeError / impl err:SecurityError",
+      "traces": 1,
       "trace": [
         {
           "op": {
             "op": "abort",
-            "signal": 0
+            "signal": 9
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "register",
+            "name": "_",
+            "title": "T",
+            "description": "d",
+            "inputSchema": "absent",
+            "outputSchema": "object",
+            "annotations": null,
+            "behavior": "returnEmpty",
+            "signal": null,
+            "exposedTo": [],
+            "doc": 1
           },
           "model": "ok",
           "actual": "ok"
@@ -85,37 +291,90 @@
           "op": {
             "op": "register",
             "name": "b",
-            "title": "Tïtle",
+            "title": null,
             "description": "d",
             "inputSchema": "object",
+            "outputSchema": "object",
+            "annotations": null,
+            "behavior": "echo",
+            "signal": 1,
+            "exposedTo": [
+              "origin:3",
+              "path:2"
+            ],
+            "doc": 0
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
+          },
+          "model": "tools:_|T|d|null|{\"type\":\"object\"}|null@1;b||d|{\"type\":\"object\"}|{\"type\":\"object\"}|null",
+          "actual": "tools:_|T|d|undefined|undefined|undefined@undefined;b||d|{\"type\":\"object\"}|undefined|undefined@undefined"
+        },
+        {
+          "op": {
+            "op": "registerAbortSync",
+            "name": "a",
+            "title": null,
+            "description": "d",
+            "inputSchema": "absent",
             "outputSchema": "nonObject",
             "annotations": {
               "consequentialHint": true,
               "debugging": true
             },
-            "behavior": "returnCyclic",
-            "signal": 0
+            "behavior": "reject",
+            "signal": 5,
+            "exposedTo": [
+              "origin:1",
+              "insecure"
+            ],
+            "doc": 1
           },
           "model": "err:TypeError",
-          "actual": "err:AbortError"
+          "actual": "err:SecurityError"
         }
       ]
     },
     {
-      "key": "register: spec err:TypeError / impl err:InvalidStateError",
-      "traces": 28,
+      "key": "registerAbortSync: spec err:TypeError / impl err:InvalidStateError",
+      "traces": 1,
       "trace": [
         {
           "op": {
-            "op": "register",
-            "name": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-            "title": "T",
+            "op": "abort",
+            "signal": 1
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
+          },
+          "model": "tools:",
+          "actual": "tools:"
+        },
+        {
+          "op": {
+            "op": "registerAbortSync",
+            "name": "a/b",
+            "title": null,
             "description": "d",
             "inputSchema": "absent",
             "outputSchema": "nonObject",
             "annotations": null,
-            "behavior": "returnUndefined",
-            "signal": 2
+            "behavior": "keys",
+            "signal": 2,
+            "exposedTo": [],
+            "doc": 0
           },
           "model": "err:TypeError",
           "actual": "err:InvalidStateError"
@@ -124,19 +383,23 @@
     },
     {
       "key": "registerAbortSync: spec err:TypeError / impl err:AbortError",
-      "traces": 19,
+      "traces": 14,
       "trace": [
         {
           "op": {
             "op": "registerAbortSync",
-            "name": "b",
+            "name": "c",
             "title": null,
             "description": "d",
             "inputSchema": "absent",
             "outputSchema": "unserializable",
-            "annotations": null,
-            "behavior": "throwSync",
-            "signal": 1
+            "annotations": {
+              "readOnlyHint": true
+            },
+            "behavior": "returnNull",
+            "signal": 2,
+            "exposedTo": [],
+            "doc": 0
           },
           "model": "err:TypeError",
           "actual": "err:AbortError"
@@ -144,152 +407,222 @@
       ]
     },
     {
-      "key": "execute: spec err:DataError / impl err:UnknownError",
-      "traces": 21,
+      "key": "execute: spec err:NotFoundError / impl result",
+      "traces": 3,
       "trace": [
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
+          },
+          "model": "tools:",
+          "actual": "tools:"
+        },
         {
           "op": {
             "op": "register",
             "name": "c",
-            "title": "",
+            "title": null,
             "description": "d",
-            "inputSchema": "object",
-            "outputSchema": "object",
-            "annotations": null,
-            "behavior": "echo",
-            "signal": null
+            "inputSchema": "viaToJSON",
+            "outputSchema": "absent",
+            "annotations": {
+              "consequentialHint": true,
+              "debugging": true
+            },
+            "behavior": "keys",
+            "signal": 1,
+            "exposedTo": [],
+            "doc": 0
           },
           "model": "ok",
           "actual": "ok"
         },
         {
           "op": {
-            "op": "getTools"
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
           },
-          "model": "tools:c||d|{\"type\":\"object\"}|{\"type\":\"object\"}|null",
-          "actual": "tools:c||d|{\"type\":\"object\"}|undefined|undefined"
+          "model": "tools:c||d|{\"type\":\"string\"}|null|{\"readOnlyHint\":false,\"untrustedContentHint\":false,\"consequentialHint\":true,\"debugging\":true}",
+          "actual": "tools:c||d|{\"type\":\"string\"}|undefined|{\"readOnlyHint\":false,\"untrustedContentHint\":false,\"consequentialHint\":true,\"debugging\":true}@undefined"
+        },
+        {
+          "op": {
+            "op": "abort",
+            "signal": 1
+          },
+          "model": "ok",
+          "actual": "ok"
         },
         {
           "op": {
             "op": "execute",
-            "call": 0,
+            "call": 1,
             "index": 0,
-            "input": "toJSONNumber"
+            "input": "toJSONNumber",
+            "doc": 0
           },
-          "model": "err:DataError",
+          "model": "err:NotFoundError",
           "actual": "err:UnknownError"
-        }
-      ]
-    },
-    {
-      "key": "registerAbortSync: spec err:TypeError / impl err:InvalidStateError",
-      "traces": 2,
-      "trace": [
+        },
         {
           "op": {
-            "op": "register",
-            "name": "B",
-            "title": null,
-            "description": "d",
-            "inputSchema": "absent",
-            "outputSchema": "absent",
-            "annotations": null,
-            "behavior": "returnCyclic",
-            "signal": null
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
           },
-          "model": "ok",
-          "actual": "ok"
+          "model": "tools:",
+          "actual": "tools:"
         },
         {
           "op": {
             "op": "register",
-            "name": "é",
-            "title": "T",
-            "description": "",
+            "name": "c",
+            "title": null,
+            "description": "d",
             "inputSchema": "absent",
             "outputSchema": "absent",
             "annotations": {
               "consequentialHint": true,
               "debugging": true
             },
-            "behavior": "returnNull",
-            "signal": null
+            "behavior": "unregisterSelf",
+            "signal": null,
+            "exposedTo": [],
+            "doc": 0
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
+          },
+          "model": "tools:c||d|null|null|{\"readOnlyHint\":false,\"untrustedContentHint\":false,\"consequentialHint\":true,\"debugging\":true}",
+          "actual": "tools:c||d|undefined|undefined|{\"readOnlyHint\":false,\"untrustedContentHint\":false,\"consequentialHint\":true,\"debugging\":true}@undefined"
+        },
+        {
+          "op": {
+            "op": "execute",
+            "call": 1,
+            "index": 0,
+            "input": "obj:7",
+            "doc": 0
+          },
+          "model": "err:NotFoundError",
+          "actual": "result:{\"n\":7}"
+        }
+      ]
+    },
+    {
+      "key": "register: spec err:TypeError / impl err:AbortError",
+      "traces": 2,
+      "trace": [
+        {
+          "op": {
+            "op": "register",
+            "name": "c",
+            "title": null,
+            "description": "",
+            "inputSchema": "object",
+            "outputSchema": "absent",
+            "annotations": null,
+            "behavior": "echo",
+            "signal": null,
+            "exposedTo": [],
+            "doc": 0
           },
           "model": "err:InvalidStateError",
           "actual": "err:InvalidStateError"
         },
         {
           "op": {
-            "op": "registerAbortSync",
-            "name": "b",
-            "title": "T",
-            "description": "",
-            "inputSchema": "absent",
-            "outputSchema": "nonObject",
-            "annotations": null,
-            "behavior": "returnEmpty",
-            "signal": 1
+            "op": "concurrent",
+            "actions": [
+              {
+                "act": "register",
+                "name": "_",
+                "title": "T",
+                "description": "d",
+                "inputSchema": "absent",
+                "outputSchema": "object",
+                "annotations": null,
+                "behavior": "returnUndefined",
+                "signal": null,
+                "exposedTo": []
+              },
+              {
+                "act": "abort",
+                "signal": 0
+              },
+              {
+                "act": "register",
+                "name": "b",
+                "title": "",
+                "description": "d",
+                "inputSchema": "unserializable",
+                "outputSchema": "unserializable",
+                "annotations": null,
+                "behavior": "returnEmpty",
+                "signal": 0,
+                "exposedTo": []
+              }
+            ],
+            "doc": 0
           },
-          "model": "err:TypeError",
-          "actual": "err:InvalidStateError"
-        }
-      ]
-    },
-    {
-      "key": "execute: spec err:NotFoundError / impl result",
-      "traces": 1,
-      "trace": [
-        {
-          "op": {
-            "op": "register",
-            "name": "a",
-            "title": "T",
-            "description": "d",
-            "inputSchema": "absent",
-            "outputSchema": "absent",
-            "annotations": null,
-            "behavior": "echo",
-            "signal": 1
-          },
-          "model": "ok",
-          "actual": "ok"
+          "model": "all:[\"ok\",\"ok\",\"err:TypeError\"]",
+          "actual": "all:[\"ok\",\"ok\",\"err:TypeError\"]"
         },
         {
           "op": {
-            "op": "register",
-            "name": "b",
-            "title": null,
-            "description": "d",
-            "inputSchema": "absent",
-            "outputSchema": "absent",
-            "annotations": null,
-            "behavior": "returnUndefined",
-            "signal": 2
+            "op": "concurrent",
+            "actions": [
+              {
+                "act": "abort",
+                "signal": 0
+              },
+              {
+                "act": "register",
+                "name": "b",
+                "title": null,
+                "description": "d",
+                "inputSchema": "absent",
+                "outputSchema": "object",
+                "annotations": null,
+                "behavior": "returnText",
+                "signal": 2,
+                "exposedTo": []
+              },
+              {
+                "act": "register",
+                "name": "c",
+                "title": "T",
+                "description": "d",
+                "inputSchema": "absent",
+                "outputSchema": "object",
+                "annotations": null,
+                "behavior": "unregisterSelf",
+                "signal": null,
+                "exposedTo": []
+              }
+            ],
+            "doc": 0
           },
-          "model": "ok",
-          "actual": "ok"
+          "model": "all:[\"ok\",\"ok\",\"ok\"]",
+          "actual": "all:[\"ok\",\"ok\",\"ok\"]"
         },
         {
           "op": {
-            "op": "getTools"
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
           },
-          "model": "tools:a|T|d|null|null|null;b||d|null|null|null",
-          "actual": "tools:a|T|d|undefined|undefined|undefined;b||d|undefined|undefined|undefined"
-        },
-        {
-          "op": {
-            "op": "registerAbortSync",
-            "name": "c",
-            "title": null,
-            "description": "Does a thing.",
-            "inputSchema": "absent",
-            "outputSchema": "absent",
-            "annotations": null,
-            "behavior": "echo",
-            "signal": 0
-          },
-          "model": "err:AbortError",
-          "actual": "err:AbortError"
+          "model": "tools:_|T|d|null|{\"type\":\"object\"}|null;b||d|null|{\"type\":\"object\"}|null;c|T|d|null|{\"type\":\"object\"}|null",
+          "actual": "tools:_|T|d|undefined|undefined|undefined@undefined;b||d|undefined|undefined|undefined@undefined;c|T|d|undefined|undefined|undefined@undefined"
         },
         {
           "op": {
@@ -302,44 +635,224 @@
         {
           "op": {
             "op": "register",
-            "name": "a",
-            "title": null,
+            "name": "c",
+            "title": "",
             "description": "d",
-            "inputSchema": "viaToJSON",
-            "outputSchema": "absent",
-            "annotations": {
-              "readOnlyHint": true
-            },
-            "behavior": "returnNumber",
-            "signal": null
-          },
-          "model": "ok",
-          "actual": "ok"
-        },
-        {
-          "op": {
-            "op": "register",
-            "name": "t-1",
-            "title": "T",
-            "description": "d",
-            "inputSchema": "object",
-            "outputSchema": "object",
+            "inputSchema": "absent",
+            "outputSchema": "viaToJSON",
             "annotations": null,
-            "behavior": "echo",
-            "signal": null
+            "behavior": "keys",
+            "signal": 2,
+            "exposedTo": [
+              "origin:2"
+            ],
+            "doc": 0
           },
-          "model": "ok",
-          "actual": "ok"
+          "model": "err:InvalidStateError",
+          "actual": "err:InvalidStateError"
         },
         {
           "op": {
             "op": "execute",
             "call": 0,
-            "index": 0,
-            "input": "obj:4"
+            "index": 1,
+            "input": "omitted",
+            "doc": 0
           },
-          "model": "err:NotFoundError",
-          "actual": "result:5"
+          "model": "result:\"hi\"",
+          "actual": "result:hi"
+        },
+        {
+          "op": {
+            "op": "execute",
+            "call": 0,
+            "index": 1,
+            "input": "obj:5",
+            "doc": 0
+          },
+          "model": "result:\"hi\"",
+          "actual": "result:hi"
+        },
+        {
+          "op": {
+            "op": "register",
+            "name": "a",
+            "title": null,
+            "description": "d",
+            "inputSchema": "absent",
+            "outputSchema": "unserializable",
+            "annotations": null,
+            "behavior": "returnNull",
+            "signal": 0,
+            "exposedTo": [],
+            "doc": 0
+          },
+          "model": "err:TypeError",
+          "actual": "err:AbortError"
+        }
+      ]
+    },
+    {
+      "key": "register: spec err:TypeError / impl timeout",
+      "traces": 1,
+      "trace": [
+        {
+          "op": {
+            "op": "register",
+            "name": "a",
+            "title": null,
+            "description": "d",
+            "inputSchema": "viaToJSON",
+            "outputSchema": "unserializable",
+            "annotations": {
+              "readOnlyHint": true
+            },
+            "behavior": "returnUndefined",
+            "signal": 3,
+            "exposedTo": [],
+            "doc": 1
+          },
+          "model": "err:TypeError",
+          "actual": "timeout"
+        }
+      ]
+    },
+    {
+      "key": "concurrent: spec any / impl all",
+      "traces": 1,
+      "trace": [
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 2
+          },
+          "model": "tools:",
+          "actual": "tools:"
+        },
+        {
+          "op": {
+            "op": "abort",
+            "signal": 8
+          },
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 2
+          },
+          "model": "tools:",
+          "actual": "tools:"
+        },
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 1
+          },
+          "model": "tools:",
+          "actual": "tools:"
+        },
+        {
+          "op": {
+            "op": "registerAbortSync",
+            "name": "ünï",
+            "title": null,
+            "description": "d",
+            "inputSchema": "absent",
+            "outputSchema": "absent",
+            "annotations": {
+              "readOnlyHint": true
+            },
+            "behavior": "unregisterSelf",
+            "signal": 1,
+            "exposedTo": [
+              "origin:0",
+              "origin:2"
+            ],
+            "doc": 0
+          },
+          "model": "err:InvalidStateError",
+          "actual": "err:InvalidStateError"
+        },
+        {
+          "op": {
+            "op": "concurrent",
+            "actions": [
+              {
+                "act": "abort",
+                "signal": 0
+              },
+              {
+                "act": "abort",
+                "signal": 0
+              },
+              {
+                "act": "cancel",
+                "target": 1
+              }
+            ],
+            "doc": 0
+          },
+          "model": "all:[\"ok\",\"ok\",\"ok\"]",
+          "actual": "all:[\"ok\",\"ok\",\"ok\"]"
+        },
+        {
+          "op": {
+            "op": "concurrent",
+            "actions": [
+              {
+                "act": "getTools",
+                "fromOrigins": [
+                  "origin:0"
+                ]
+              },
+              {
+                "act": "register",
+                "name": "123",
+                "title": "T",
+                "description": "d",
+                "inputSchema": "object",
+                "outputSchema": "nonObject",
+                "annotations": null,
+                "behavior": "unregisterSelf",
+                "signal": 3,
+                "exposedTo": []
+              },
+              {
+                "act": "register",
+                "name": "B",
+                "title": null,
+                "description": "d",
+                "inputSchema": "object",
+                "outputSchema": "absent",
+                "annotations": null,
+                "behavior": "returnNull",
+                "signal": 3,
+                "exposedTo": []
+              },
+              {
+                "act": "register",
+                "name": "a",
+                "title": null,
+                "description": "Does a thing.",
+                "inputSchema": "absent",
+                "outputSchema": "viaToJSON",
+                "annotations": {
+                  "readOnlyHint": true
+                },
+                "behavior": "returnNull",
+                "signal": null,
+                "exposedTo": []
+              }
+            ],
+            "doc": 1
+          },
+          "model": "any:[\"all:[\\\"tools:\\\",\\\"err:TypeError\\\",\\\"ok\\\",\\\"ok\\\"]\",\"all:[\\\"tools:B||d|{\\\\\\\"type\\\\\\\":\\\\\\\"object\\\\\\\"}|null|null\\\",\\\"err:TypeError\\\",\\\"ok\\\",\\\"ok\\\"]\",\"all:[\\\"tools:B||d|{\\\\\\\"type\\\\\\\":\\\\\\\"object\\\\\\\"}|null|null;a||Does a thing.|null|{\\\\\\\"type\\\\\\\":\\\\\\\"string\\\\\\\"}|{\\\\\\\"readOnlyHint\\\\\\\":true,\\\\\\\"untrustedContentHint\\\\\\\":false,\\\\\\\"consequentialHint\\\\\\\":false,\\\\\\\"debugging\\\\\\\":false}\\\",\\\"err:TypeError\\\",\\\"ok\\\",\\\"ok\\\"]\"]",
+          "actual": "all:[\"tools:\",\"ok\",\"ok\",\"ok\"]"
         }
       ]
     }

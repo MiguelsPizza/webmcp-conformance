@@ -20,80 +20,72 @@
     "seed": 7,
     "traces": 1000
   },
-  "date": "2026-11-22T23:23:34.004Z",
+  "date": "2026-11-23T00:19:54.450Z",
   "expectations": {
     "file": "expectations/polyfill.json",
     "applied": [
-      "polyfill-0.1-absent-members-undefined"
+      "polyfill-0.1-absent-members-undefined",
+      "polyfill-policy-checked-after-arguments",
+      "polyfill-duplicate-name-checked-late",
+      "polyfill-cancel-skips-callback"
     ],
     "skipped": []
   },
   "counts": {
     "traces": 1000,
-    "calls": 6316,
-    "compared": 6316,
-    "agree": 5546,
+    "calls": 6146,
+    "compared": 6142,
+    "agree": 5360,
     "expected": {
-      "polyfill-0.1-absent-members-undefined": 769
+      "polyfill-0.1-absent-members-undefined": 775,
+      "polyfill-policy-checked-after-arguments": 21,
+      "polyfill-duplicate-name-checked-late": 2,
+      "polyfill-cancel-skips-callback": 2
     },
-    "unexpected": 1
+    "unexpected": 3
   },
   "unexpected": [
     {
       "key": "execute: spec err:NotFoundError / impl result",
-      "traces": 1,
+      "traces": 3,
       "trace": [
         {
           "op": {
-            "op": "register",
-            "name": "a",
-            "title": "T",
-            "description": "d",
-            "inputSchema": "absent",
-            "outputSchema": "absent",
-            "annotations": null,
-            "behavior": "echo",
-            "signal": 1
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
           },
-          "model": "ok",
-          "actual": "ok"
+          "model": "tools:",
+          "actual": "tools:"
         },
         {
           "op": {
             "op": "register",
-            "name": "b",
-            "title": null,
-            "description": "d",
-            "inputSchema": "absent",
-            "outputSchema": "absent",
-            "annotations": null,
-            "behavior": "returnUndefined",
-            "signal": 2
-          },
-          "model": "ok",
-          "actual": "ok"
-        },
-        {
-          "op": {
-            "op": "getTools"
-          },
-          "model": "tools:a|T|d|null|null|null;b||d|null|null|null",
-          "actual": "tools:a|T|d|undefined|undefined|undefined;b||d|undefined|undefined|undefined"
-        },
-        {
-          "op": {
-            "op": "registerAbortSync",
             "name": "c",
             "title": null,
-            "description": "Does a thing.",
-            "inputSchema": "absent",
+            "description": "d",
+            "inputSchema": "viaToJSON",
             "outputSchema": "absent",
-            "annotations": null,
-            "behavior": "echo",
-            "signal": 0
+            "annotations": {
+              "consequentialHint": true,
+              "debugging": true
+            },
+            "behavior": "keys",
+            "signal": 1,
+            "exposedTo": [],
+            "doc": 0
           },
-          "model": "err:AbortError",
-          "actual": "err:AbortError"
+          "model": "ok",
+          "actual": "ok"
+        },
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
+          },
+          "model": "tools:c||d|{\"type\":\"string\"}|null|{\"readOnlyHint\":false,\"untrustedContentHint\":false,\"consequentialHint\":true,\"debugging\":true}",
+          "actual": "tools:c||d|{\"type\":\"string\"}|undefined|{\"readOnlyHint\":false,\"untrustedContentHint\":false,\"consequentialHint\":true,\"debugging\":true}@undefined"
         },
         {
           "op": {
@@ -105,45 +97,63 @@
         },
         {
           "op": {
+            "op": "execute",
+            "call": 1,
+            "index": 0,
+            "input": "toJSONNumber",
+            "doc": 0
+          },
+          "model": "err:NotFoundError",
+          "actual": "err:NotFoundError"
+        },
+        {
+          "op": {
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
+          },
+          "model": "tools:",
+          "actual": "tools:"
+        },
+        {
+          "op": {
             "op": "register",
-            "name": "a",
+            "name": "c",
             "title": null,
             "description": "d",
-            "inputSchema": "viaToJSON",
+            "inputSchema": "absent",
             "outputSchema": "absent",
             "annotations": {
-              "readOnlyHint": true
+              "consequentialHint": true,
+              "debugging": true
             },
-            "behavior": "returnNumber",
-            "signal": null
+            "behavior": "unregisterSelf",
+            "signal": null,
+            "exposedTo": [],
+            "doc": 0
           },
           "model": "ok",
           "actual": "ok"
         },
         {
           "op": {
-            "op": "register",
-            "name": "t-1",
-            "title": "T",
-            "description": "d",
-            "inputSchema": "object",
-            "outputSchema": "object",
-            "annotations": null,
-            "behavior": "echo",
-            "signal": null
+            "op": "getTools",
+            "fromOrigins": [],
+            "doc": 0
           },
-          "model": "ok",
-          "actual": "ok"
+          "model": "tools:c||d|null|null|{\"readOnlyHint\":false,\"untrustedContentHint\":false,\"consequentialHint\":true,\"debugging\":true}",
+          "actual": "tools:c||d|undefined|undefined|{\"readOnlyHint\":false,\"untrustedContentHint\":false,\"consequentialHint\":true,\"debugging\":true}@undefined"
         },
         {
           "op": {
             "op": "execute",
-            "call": 0,
+            "call": 1,
             "index": 0,
-            "input": "obj:4"
+            "input": "obj:7",
+            "doc": 0
           },
           "model": "err:NotFoundError",
-          "actual": "result:5"
+          "actual": "result:{\"n\":7}"
         }
       ]
     }

@@ -24,13 +24,15 @@
     },
     {
       "id": "chromium-157-tool-members",
-      "description": "getTools() Tools have no outputSchema attribute, and an absent inputSchema or annotations reads as undefined instead of null. Fixed by Chrome Canary 160.0.8177.0. Only the getTools() view is covered: registerTool() also skips outputSchema validation, which changes the tool map, so that stays unexpected.",
+      "description": "getTools() Tools have no outputSchema attribute and no source (they have a window member instead, so every Tool prints as from @undefined), and an absent inputSchema or annotations reads as undefined instead of null. Fixed by Chrome Canary 160.0.8177.0. Only the getTools() view is covered: registerTool() also skips outputSchema validation, which changes the tool map, so that stays unexpected.",
       "issue": "https://github.com/webmachinelearning/webmcp/pull/348",
       "status": "implementation-lag",
       "versions": "<160",
       "match": { "op": "getTools", "rewrite": [
+        { "from": "@\\d+(?=;|$)", "flags": "g", "to": "" },
         { "from": "([^|;]*\\|[^|;]*\\|[^|;]*\\|[^|;]*)\\|[^|;]*(?=\\|[^|;]*(;|$))", "flags": "g", "to": "$1|undefined" },
-        { "from": "\\|null(?=;|\\||$)", "flags": "g", "to": "|undefined" }
+        { "from": "\\|null(?=;|\\||$)", "flags": "g", "to": "|undefined" },
+        { "from": "(?<=[^:;])(?=;|$)", "flags": "g", "to": "@undefined" }
       ] }
     },
     {

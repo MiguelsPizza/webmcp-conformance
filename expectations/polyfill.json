@@ -3,11 +3,43 @@
   "expectations": [
     {
       "id": "polyfill-0.1-absent-members-undefined",
-      "description": "getTools() returns dictionaries rather than Tool objects, so an absent inputSchema, outputSchema or annotations reads as undefined where a Tool exposes null. Fixed by w3c-oss/webmcp-polyfill#25, a breaking change, so expected to ship as 0.2.0.",
+      "description": "getTools() returns dictionaries rather than Tool objects, so an absent inputSchema, outputSchema or annotations reads as undefined where a Tool exposes null, and there is no source, so every Tool prints as from @undefined. Fixed by w3c-oss/webmcp-polyfill#25, a breaking change, so expected to ship as 0.2.0.",
       "issue": "https://github.com/webmachinelearning/webmcp/pull/348",
       "status": "implementation-lag",
       "versions": "<0.2.0",
-      "match": { "op": "getTools", "rewrite": [{ "from": "\\|null(?=;|\\||$)", "flags": "g", "to": "|undefined" }] }
+      "match": { "op": "getTools", "rewrite": [
+        { "from": "@\\d+(?=;|$)", "flags": "g", "to": "" },
+        { "from": "\\|null(?=;|\\||$)", "flags": "g", "to": "|undefined" },
+        { "from": "(?<=[^:;])(?=;|$)", "flags": "g", "to": "@undefined" }
+      ] }
+    },
+    {
+      "id": "polyfill-policy-checked-after-arguments",
+      "description": "In a document not allowed to use the \"tools\" feature, registerTool() with an invalid name, description, schema or exposedTo, or an aborted signal, rejects with that argument's error. The spec checks the permissions policy right after Web IDL conversion and rejects with NotAllowedError. Seen in main and in #25.",
+      "spec": "https://webmachinelearning.github.io/webmcp/#dom-modelcontext-registertool",
+      "status": "implementation-bug",
+      "repro": "repros/policy-checked-after-arguments.json",
+      "match": { "op": ["register", "registerAbortSync"], "where": { "doc": 4 },
+                 "want": "^err:NotAllowedError$", "actual": "^err:(InvalidStateError|TypeError|SecurityError|AbortError)$" }
+    },
+    {
+      "id": "polyfill-duplicate-name-checked-late",
+      "description": "Two registerTool() calls with the same name from one script: the spec adds the first tool to the tool map synchronously, so the second rejects with InvalidStateError before its signal or schemas are looked at. The polyfill finds the duplicate only later, so the second rejects with AbortError (its signal is already aborted) or TypeError (its inputSchema can't be serialized) instead. Awaiting each call hides it. Seen in main and in #25.",
+      "spec": "https://webmachinelearning.github.io/webmcp/#dom-modelcontext-registertool",
+      "status": "implementation-bug",
+      "repro": "repros/duplicate-name-checked-late.json",
+      "match": { "op": "register", "where": { "concurrent": true },
+                 "want": "^err:InvalidStateError$", "actual": "^err:(TypeError|SecurityError|AbortError)$" }
+    },
+    {
+      "id": "polyfill-cancel-skips-callback",
+      "description": "Aborting executeTool()'s signal right after the call stops the tool's callback from running. The spec rejects the promise with AbortError, but nothing stops the queued tool execute steps, so the callback still runs, as it does in Chromium 157. It shows only through what the callback does: an unregisterSelf tool stays registered, so later calls differ. Possibly the spec doesn't mean the callback to run. Seen in main and in #25.",
+      "spec": "https://webmachinelearning.github.io/webmcp/#dom-modelcontext-executetool",
+      "status": "possible-spec-issue",
+      "stop": true,
+      "repro": "repros/cancel-skips-callback.json",
+      "match": { "op": ["getTools", "register", "registerAbortSync", "execute"],
+                 "after": [{ "behavior": "unregisterSelf" }, { "act": "cancel" }], "actual": "^" }
     }
   ]
 }

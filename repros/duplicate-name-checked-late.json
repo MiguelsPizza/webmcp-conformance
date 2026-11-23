@@ -1,0 +1,57 @@
+{
+  "spec": "14b6d53",
+  "comment": {
+    "shows": "registerTool() adds the tool to the tool map before returning its promise, so a second registerTool() with the same name from the same script rejects with InvalidStateError, ahead of the AbortError its already-aborted signal would give.",
+    "spec": [
+      "https://webmachinelearning.github.io/webmcp/#dom-modelcontext-registertool"
+    ],
+    "model": "ok  /  all:[\"ok\",\"err:InvalidStateError\"]",
+    "observed": {
+      "polyfill main (4c01562)": "ok  /  all:[\"ok\",\"err:AbortError\"]",
+      "polyfill PR #25 (63ddbfd)": "ok  /  all:[\"ok\",\"err:AbortError\"]",
+      "Chromium 157.0.8103.78 (Playwright 1.63.0 bundled)": "agrees with the model"
+    }
+  },
+  "traces": [
+    {
+      "ops": [
+        {
+          "op": "abort",
+          "signal": 0
+        },
+        {
+          "op": "concurrent",
+          "doc": 0,
+          "actions": [
+            {
+              "act": "register",
+              "name": "b",
+              "title": null,
+              "description": "d",
+              "inputSchema": "absent",
+              "outputSchema": "absent",
+              "annotations": null,
+              "behavior": "echo",
+              "signal": null
+            },
+            {
+              "act": "register",
+              "name": "b",
+              "title": null,
+              "description": "d",
+              "inputSchema": "absent",
+              "outputSchema": "absent",
+              "annotations": null,
+              "behavior": "echo",
+              "signal": 0
+            }
+          ]
+        }
+      ],
+      "want": [
+        "ok",
+        "all:[\"ok\",\"err:InvalidStateError\"]"
+      ]
+    }
+  ]
+}

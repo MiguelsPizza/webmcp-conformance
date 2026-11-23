@@ -17,7 +17,7 @@ The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a smal
 | [`harness/run.cjs`](harness/run.cjs) | Generates traces, runs them in a browser, compares, shrinks. |
 | [`corpus/`](corpus) | 1,000 recorded traces with expected outcomes, for running without Lean. |
 | [`wpt/`](wpt/README.md), [`tools/wpt-score.cjs`](tools/wpt-score.cjs) | The model scored against the official web-platform-tests for WebMCP: each in-scope subtest translated to a trace. |
-| [`expectations/`](expectations) | Known divergences per target family (#361, and version lag), counted instead of failing. |
+| [`expectations/`](expectations) | Known divergences per target family (#361, version lag, and polyfill bugs and a possible spec issue found with frames and calls in flight), counted instead of failing. |
 | [`results/`](results) | Machine-written results of each run: versions, counts, and the trace for each unexpected divergence. |
 | [`repros/`](repros) | One minimal trace per finding in RESULTS.md, with what each implementation does. |
 | [`wpt-export/`](wpt-export), [`tools/export-wpt.cjs`](tools/export-wpt.cjs), [`tools/run-wpt-export.cjs`](tools/run-wpt-export.cjs) | The repros as WPT testharness.js tests (not submitted), and a Playwright runner for them. |
@@ -113,7 +113,7 @@ Where each part of the spec the model transcribes lives in the Lean. Theorems ar
 - Each call has a 5-second timeout, so an implementation that never settles a promise shows up as `timeout` instead of hanging the run.
 - The harness serves the frame tree from a local HTTP server, with origins 0, 1 and 2 as `http://127.0.0.1:<port A>`, `http://localhost:<port A>` and `http://127.0.0.1:<port B>` (loopback, so potentially trustworthy), and origin 3 as `https://other.example`, which no document has. Each operation runs in the document it names (`doc`), with registration signal `n` belonging to document `n / 3`. A `Tool` is printed with `@<document>` when its `source` is another document's window, and, for operations that name a document, with `!origin=<value>` when its `origin` isn't its source document's.
 - Where the spec allows several outcomes, the expected outcome is `any:` followed by a JSON array of them, and any one matches. A `concurrent` operation's outcome is `all:` followed by a JSON array of its actions' outcomes, compared one by one. The oracle gives each operation the outcomes allowed from any state the earlier operations may have left, so it doesn't check that a later operation's outcome goes with the one an earlier operation actually had.
-- A divergence listed in `expectations/<family>.json` (such as spec issue #361's result strings) is counted under its id and the trace goes on, so it doesn't hide other bugs later in the same trace. Any other divergence ends that trace, and makes the run exit non-zero. `--no-expectations` counts everything as unexpected.
+- A divergence listed in `expectations/<family>.json` (such as spec issue #361's result strings) is counted under its id and the trace goes on, so it doesn't hide other bugs later in the same trace (or, for one marked `stop` because it leaves the states apart, the trace ends without failing). Where the model allows several outcomes, an expectation may explain any one of them; a `concurrent` operation's actions are matched one by one. Any other divergence ends that trace, and makes the run exit non-zero. `--no-expectations` counts everything as unexpected.
 
 ## What this does and doesn't guarantee
 

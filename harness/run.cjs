@@ -619,7 +619,7 @@ function expectedBy(op, want, got, before) {
 // Judge one outcome: null if `got` isn't allowed, else the expectations it took (none when it
 // agrees). `any:[...]` allows any of the outcomes listed (taking the one needing the fewest
 // expectations), and `all:[...]` judges a `concurrent` op's actions one by one, each as an op
-// of its own kind in the concurrent op's document.
+// of its own kind in the concurrent op's document, marked `concurrent: true`.
 function judge(op, want, got, before) {
   if (want === got) return [];
   if (want.startsWith("any:")) {
@@ -636,7 +636,7 @@ function judge(op, want, got, before) {
     const { actions, ...rest } = op;
     const ids = [];
     for (let i = 0; i < w.length; i++) {
-      const r = judge({ ...rest, ...actions[i], op: actions[i].act }, w[i], g[i], before);
+      const r = judge({ ...rest, ...actions[i], op: actions[i].act, concurrent: true }, w[i], g[i], before);
       if (!r) return null;
       ids.push(...r);
     }

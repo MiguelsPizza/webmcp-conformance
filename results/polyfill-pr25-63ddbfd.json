@@ -20,21 +20,27 @@
     "seed": 7,
     "traces": 1000
   },
-  "date": "2026-11-22T23:23:57.226Z",
+  "date": "2026-11-23T00:19:54.697Z",
   "expectations": {
     "file": "expectations/polyfill.json",
     "applied": [
-      "polyfill-0.1-absent-members-undefined"
+      "polyfill-0.1-absent-members-undefined",
+      "polyfill-policy-checked-after-arguments",
+      "polyfill-duplicate-name-checked-late",
+      "polyfill-cancel-skips-callback"
     ],
     "skipped": []
   },
   "counts": {
     "traces": 1000,
-    "calls": 6316,
-    "compared": 6316,
-    "agree": 6316,
+    "calls": 6146,
+    "compared": 6146,
+    "agree": 6123,
     "expected": {
-      "polyfill-0.1-absent-members-undefined": 0
+      "polyfill-0.1-absent-members-undefined": 0,
+      "polyfill-policy-checked-after-arguments": 21,
+      "polyfill-duplicate-name-checked-late": 2,
+      "polyfill-cancel-skips-callback": 0
     },
     "unexpected": 0
   },
