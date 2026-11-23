@@ -1,5 +1,7 @@
 name = "webmcp-conformance"
 defaultTargets = ["WebMCP", "oracle"]
+testDriver = "replay"
+testDriverArgs = ["corpus", "repros"]
 
 [[lean_lib]]
 name = "WebMCP"
@@ -7,6 +9,11 @@ name = "WebMCP"
 [[lean_exe]]
 name = "oracle"
 root = "Main"
+
+[[lean_exe]]
+name = "replay"
+root = "ReplayTest"
+needs = ["oracle"]
 
 [leanOptions]
 autoImplicit = false

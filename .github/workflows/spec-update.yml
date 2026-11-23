@@ -4,7 +4,7 @@ name: Spec update
 # Claude update the model to match, re-records the corpus, runs the same gate as the Check
 # workflow, and opens a pull request for review. Nothing is pushed to main.
 #
-# Scheduled runs follow webmachinelearning/webmcp main and open at most one pull request at a
+# Scheduled runs follow webmachinelearning/webmcp main hourly and open at most one pull request at a
 # time. A manual run can point at any branch, commit or open spec PR (pull/<n>/head), in the
 # upstream repo or a fork, to preview what an unmerged spec change does to the model; those open
 # as drafts.
@@ -15,7 +15,13 @@ name: Spec update
 
 on:
   schedule:
-    - cron: "17 13 * * *"
+    # Hourly. GitHub can't notify this repo of pushes to a repo it doesn't control, so this polls;
+    # a run with nothing new costs about a minute.
+    - cron: "17 * * * *"
+  # For anything that can send a dispatch: an upstream workflow, a relay, or you by hand.
+  # client_payload may carry spec_ref and spec_repo, as for a manual run.
+  repository_dispatch:
+    types: [upstream-changed]
   workflow_dispatch:
     inputs:
       spec_ref:
@@ -34,8 +40,8 @@ permissions:
   pull-requests: write
 
 env:
-  SPEC_REPO: ${{ inputs.spec_repo || 'webmachinelearning/webmcp' }}
-  SPEC_REF: ${{ inputs.spec_ref || 'main' }}
+  SPEC_REPO: ${{ inputs.spec_repo || github.event.client_payload.spec_repo || 'webmachinelearning/webmcp' }}
+  SPEC_REF: ${{ inputs.spec_ref || github.event.client_payload.spec_ref || 'main' }}
 
 jobs:
   update:
@@ -99,7 +105,7 @@ jobs:
           else
             prefix=spec-preview/; draft=true
           fi
-          branch="$prefix${{ steps.spec.outputs.target }}"
+          branch="${prefix}${{ steps.spec.outputs.target }}"
           open=$(gh api "repos/$GITHUB_REPOSITORY/pulls?state=open&per_page=100" --jq '.[].head.ref')
           if grep -qx "$branch" <<<"$open" || { [ "$prefix" = spec-update/ ] && grep -q '^spec-update/' <<<"$open"; }; then
             echo "An open pull request already covers this; merge or close it first."
@@ -149,7 +155,7 @@ jobs:
             --add-dir "$SPEC_DIR" "$OUT_DIR" \
             --tools Read Edit Write Glob Grep Bash \
             --allowedTools Read Edit Write Glob Grep \
-              "Bash(lake build:*)" "Bash(lake env:*)" "Bash(.github/spec-update/check.sh)" \
+              "Bash(lake build:*)" "Bash(lake test:*)" "Bash(node tools/check-spec.cjs:*)" "Bash(node tools/refresh-repros.cjs:*)" "Bash(lake env:*)" "Bash(.github/spec-update/check.sh)" \
               "Bash(node harness/run.cjs:*)" "Bash(echo:*)" "Bash(cat:*)" \
             --disallowedTools "Bash(git:*)" "Bash(gh:*)" "Bash(curl:*)" WebFetch WebSearch \
             --settings '{"attribution":false,"includeGitInstructions":false}' \
@@ -190,15 +196,20 @@ jobs:
           git config user.email "$(git log -1 --format=%ae origin/main)"
           git switch -c "$BRANCH"
           git add -A
+          # Model-written text can quote spec issue and PR numbers or names. Neutralise those so
+          # nothing here pings anyone or adds backlinks to the spec repo; the commit message is
+          # fixed text for the same reason.
+          node .github/spec-update/sanitize.cjs --title "$OUT_DIR/pr-title.txt"
+          node .github/spec-update/sanitize.cjs "$OUT_DIR/pr-body.md"
           title=$(head -n1 "$OUT_DIR/pr-title.txt")
-          git commit -q -m "$title" -m "Spec ${{ steps.spec.outputs.base }}..${{ steps.spec.outputs.target }} ($SPEC_REPO $SPEC_REF)"
+          git commit -q -m "Move the model to spec ${{ steps.spec.outputs.target }}" -m "Spec ${{ steps.spec.outputs.base }}..${{ steps.spec.outputs.target }} ($SPEC_REPO $SPEC_REF)"
           git push -q "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY.git" "HEAD:refs/heads/$BRANCH"
           draft=${{ steps.pr.outputs.draft }}
           [ "${{ steps.gate.outputs.ok }}" = true ] || draft=true
           {
             cat "$OUT_DIR/pr-body.md"
             echo
-            echo "Spec diff: https://github.com/$SPEC_REPO/compare/${{ steps.spec.outputs.base }}...${{ steps.spec.outputs.target }}"
+            echo "Spec range: \`${{ steps.spec.outputs.base }}...${{ steps.spec.outputs.target }}\` in \`$SPEC_REPO\` ($SPEC_REF)"
             echo
             echo '```'
             cat "$RUNNER_TEMP/gate.txt"

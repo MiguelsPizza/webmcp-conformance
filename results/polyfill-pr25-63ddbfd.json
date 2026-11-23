@@ -1,0 +1,42 @@
+{
+  "target": "polyfill:polyfill-pr25/dist/polyfill.js",
+  "implementation": {
+    "kind": "polyfill",
+    "path": "polyfill-pr25/dist/polyfill.js",
+    "package": "@w3c/webmcp-polyfill",
+    "version": "0.1.1",
+    "commit": "63ddbfd5b51ff42464969efb112386c0eb142728",
+    "remote": "https://github.com/webmachinelearning/webmcp-polyfill"
+  },
+  "browser": {
+    "name": "chromium",
+    "version": "157.0.8103.78",
+    "playwright": "1.63.0"
+  },
+  "spec": "14b6d53",
+  "corpus": {
+    "file": "corpus/spec-14b6d53.json",
+    "spec": "14b6d53",
+    "seed": 7,
+    "traces": 1000
+  },
+  "date": "2026-11-22T23:23:57.226Z",
+  "expectations": {
+    "file": "expectations/polyfill.json",
+    "applied": [
+      "polyfill-0.1-absent-members-undefined"
+    ],
+    "skipped": []
+  },
+  "counts": {
+    "traces": 1000,
+    "calls": 6316,
+    "compared": 6316,
+    "agree": 6316,
+    "expected": {
+      "polyfill-0.1-absent-members-undefined": 0
+    },
+    "unexpected": 0
+  },
+  "unexpected": []
+}

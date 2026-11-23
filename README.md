@@ -10,17 +10,24 @@ The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a smal
 
 | Path | What it is |
 |---|---|
-| [`WebMCP/Model.lean`](WebMCP/Model.lean) | The model. Each definition cites the spec algorithm it transcribes (`Spec: #anchor`), and the file lists every simplification it makes. |
+| [`WebMCP/Model.lean`](WebMCP/Model.lean) | The model. Each definition cites the spec algorithm it transcribes (`Spec: [#anchor](…)`), and the file lists every simplification it makes. |
 | [`WebMCP/Proofs.lean`](WebMCP/Proofs.lean) | Proofs about the model. The build fails if any of them rests on `sorry`. |
 | [`WebMCP/Examples.lean`](WebMCP/Examples.lean) | Hand-written traces with the outcomes the spec requires, including the spec's own examples, checked at build time. |
 | [`WebMCP/Oracle.lean`](WebMCP/Oracle.lean), [`Main.lean`](Main.lean) | The oracle: JSON traces in, the spec's outcomes out. `Oracle.lean` has the wire format, `Main.lean` the loop over stdin. |
 | [`harness/run.cjs`](harness/run.cjs) | Generates traces, runs them in a browser, compares, shrinks. |
 | [`corpus/`](corpus) | 1,000 recorded traces with expected outcomes, for running without Lean. |
+| [`wpt/`](wpt/README.md), [`tools/wpt-score.cjs`](tools/wpt-score.cjs) | The model scored against the official web-platform-tests for WebMCP: each in-scope subtest translated to a trace. |
+| [`expectations/`](expectations) | Known divergences per target family (#361, and version lag), counted instead of failing. |
+| [`results/`](results) | Machine-written results of each run: versions, counts, and the trace for each unexpected divergence. |
+| [`repros/`](repros) | One minimal trace per finding in RESULTS.md, with what each implementation does. |
+| [`wpt-export/`](wpt-export), [`tools/export-wpt.cjs`](tools/export-wpt.cjs), [`tools/run-wpt-export.cjs`](tools/run-wpt-export.cjs) | The repros as WPT testharness.js tests (not submitted), and a Playwright runner for them. |
+| [`ReplayTest.lean`](ReplayTest.lean) | `lake test`: replays the corpus and repros through the oracle. |
 | [`spec/anchors.json`](spec/anchors.json), [`tools/check-spec.cjs`](tools/check-spec.cjs) | The spec commit the model reflects, and a hash of each part of `index.bs` it transcribes. |
+| [`docbuild/`](docbuild/lakefile.toml) | Builds browsable HTML docs (docstrings, spec quotes, theorem statements) with doc-gen4, kept separate so the main package has no dependencies. |
 
 ## Reading the Lean
 
-You don't need to know Lean to follow `WebMCP/Model.lean` against the spec. Each definition's docstring names the spec algorithm (`Spec: #anchor`), and each check inside it quotes the step it models. The module doc at the top of the file has a table from spec terms (tool definition, `Tool`, tool id, tool execution error) to Lean names, and [Spec mapping](#spec-mapping) below goes from each spec anchor to its definitions, theorems and examples. The syntax that comes up most:
+You don't need to know Lean to follow `WebMCP/Model.lean` against the spec. Each definition's docstring links the spec algorithm (`Spec: [#anchor](…)`), and each check inside it quotes the step it models. The module doc at the top of the file has a table from spec terms (tool definition, `Tool`, tool id, tool execution error) to Lean names, and [Spec mapping](#spec-mapping) below goes from each spec anchor to its definitions, theorems and examples. The syntax that comes up most:
 
 | Lean | Roughly, in JavaScript |
 |---|---|
@@ -106,7 +113,7 @@ Where each part of the spec the model transcribes lives in the Lean. Theorems ar
 - Each call has a 5-second timeout, so an implementation that never settles a promise shows up as `timeout` instead of hanging the run.
 - The harness serves the frame tree from a local HTTP server, with origins 0, 1 and 2 as `http://127.0.0.1:<port A>`, `http://localhost:<port A>` and `http://127.0.0.1:<port B>` (loopback, so potentially trustworthy), and origin 3 as `https://other.example`, which no document has. Each operation runs in the document it names (`doc`), with registration signal `n` belonging to document `n / 3`. A `Tool` is printed with `@<document>` when its `source` is another document's window, and, for operations that name a document, with `!origin=<value>` when its `origin` isn't its source document's.
 - Where the spec allows several outcomes, the expected outcome is `any:` followed by a JSON array of them, and any one matches. A `concurrent` operation's outcome is `all:` followed by a JSON array of its actions' outcomes, compared one by one. The oracle gives each operation the outcomes allowed from any state the earlier operations may have left, so it doesn't check that a later operation's outcome goes with the one an earlier operation actually had.
-- `--known` treats the result-serialization differences in spec issue #361 as equal and counts them, so they don't hide other bugs later in the same trace.
+- A divergence listed in `expectations/<family>.json` (such as spec issue #361's result strings) is counted under its id and the trace goes on, so it doesn't hide other bugs later in the same trace. Any other divergence ends that trace, and makes the run exit non-zero. `--no-expectations` counts everything as unexpected.
 
 ## What this does and doesn't guarantee
 
@@ -121,22 +128,39 @@ Every implementation can be checked without Lean, against the recorded corpus:
 ```
 npm install                                                     # Playwright only
 npx playwright install chromium                                 # its bundled Chromium
-node harness/run.cjs <target> --replay corpus/spec-14b6d53.json
+node harness/run.cjs <target> --replay corpus/spec-14b6d53.json [--results results/<label>.json]
+node harness/run.cjs <target> --replay repros/<finding>.json            # one finding
 ```
 
 `<target>` is one of:
 
 - `polyfill:<path to dist/polyfill.js>`: the polyfill, injected into Playwright's Chromium
-- `chromium`: Playwright's bundled Chromium, with its native WebMCP behind `--enable-blink-features=WebMCP`. The rows in RESULTS.md used real Chrome builds, through the next form.
+- `chromium`: Playwright's bundled Chromium (157.0.8103.78 with Playwright 1.63.0), with its native WebMCP behind `--enable-blink-features=WebMCP`. The hand-run rows in RESULTS.md used real Chrome builds, through the next form.
 - `chromium:<path to a chrome binary>`: the same for another build, such as Canary
 
 With Lean 4.36.0 (pinned in `lean-toolchain`; no Mathlib) you can also check the proofs, generate fresh traces, and shrink any disagreement to a minimal repro:
 
 ```
 lake build                                          # proofs, examples, oracle
-node harness/run.cjs <target> [traces=300] [seed=1]
+lake test                                           # corpus and repros still match the model; no browser
+node harness/run.cjs <target> [traces=300] [seed=1] [--results <file>]
 node harness/run.cjs --record <corpus.json> [traces] [seed]   # also prints outcome coverage
 ```
+
+To turn the repros into WPT tests and run them (see [`wpt-export/README.md`](wpt-export/README.md)):
+
+```
+node tools/export-wpt.cjs repros/*.json --focus
+node tools/run-wpt-export.cjs <wpt checkout> <target>
+```
+
+Docs: the same docstrings, spec quotes and theorem statements as HTML pages, built with doc-gen4. The [Docs workflow](.github/workflows/docs.yml) builds them on every push to main and attaches them to the run as the `docs` artifact. Locally (the first build compiles doc-gen4 and takes about 8 minutes; later ones take under a minute):
+
+```
+cd docbuild && DOCGEN_SRC=file lake build WebMCP:docs   # then open .lake/build/doc/WebMCP/Model.html
+```
+
+`DOCGEN_SRC=file` links each declaration to its local source file; leave it out to link to GitHub, which needs an `origin` remote on GitHub.
 
 ## Keeping it current
 
@@ -144,5 +168,5 @@ node harness/run.cjs --record <corpus.json> [traces] [seed]   # also prints outc
 
 1. `lake build`. If a proved property no longer holds, the proof that stops compiling says which one.
 2. `node tools/check-spec.cjs <index.bs> --update <sha>`.
-3. Re-record the corpus.
+3. Re-record the corpus, and refresh the repros' outcomes with `node tools/refresh-repros.cjs`.
 4. Rerun the harness to see which implementations have caught up.

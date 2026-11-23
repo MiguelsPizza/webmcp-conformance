@@ -1,7 +1,8 @@
 // Detects spec drift. Each entry of spec/anchors.json names a part of index.bs the model
 // transcribes and the hash of its text at the spec commit the model reflects. This script
 // re-extracts those parts from an index.bs and reports any whose text changed, so the model
-// definition citing it (`Spec: #<anchor>` in WebMCP/Model.lean) gets re-read.
+// definition citing it (`Spec: #<anchor>` in WebMCP/Model.lean, or the same as a markdown link,
+// `Spec: [#<anchor>](https://webmachinelearning.github.io/webmcp/#<anchor>)`) gets re-read.
 //
 //   node tools/check-spec.cjs <index.bs>                  exit 1 if anything changed
 //   node tools/check-spec.cjs <index.bs> --update <sha>   record new hashes for spec commit <sha>
@@ -42,6 +43,13 @@ function extract(marker) {
   const ends = ["</dl>", "</table>"].map((t) => spec.indexOf(t, at)).filter((i) => i >= 0);
   return spec.slice(start, Math.min(...ends) + 8);
 }
+const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const citation = (anchor) => {
+  const a = escape(anchor);
+  return new RegExp(
+    `Spec: (?:#${a}|\\[#${a}\\]\\(https://webmachinelearning\\.github\\.io/webmcp/#${a}\\))(?![\\w-])`,
+  );
+};
 const hash = (text) =>
   crypto.createHash("sha256").update(text.replace(/\s+/g, " ").trim()).digest("hex").slice(0, 16);
 
@@ -49,7 +57,7 @@ let changed = 0;
 for (const a of anchors.anchors) {
   const text = extract(a.marker);
   const h = text === null ? "missing" : hash(text);
-  const cited = model.includes(`Spec: #${a.anchor}`);
+  const cited = citation(a.anchor).test(model);
   if (flag === "--update") {
     a.sha256 = h;
   } else if (h !== a.sha256) {

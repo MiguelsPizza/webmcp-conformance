@@ -1,8 +1,8 @@
 // Differential conformance test: random API-call traces run against a WebMCP implementation,
 // compared call by call with what the Lean model (the oracle) says the spec requires.
 //
-//   node harness/run.cjs <target> [traces=300] [seed=1] [--known]       live, needs the oracle
-//   node harness/run.cjs <target> --replay <corpus.json> [--known]       no Lean needed
+//   node harness/run.cjs <target> [traces=300] [seed=1] [options]       live, needs the oracle
+//   node harness/run.cjs <target> --replay <corpus.json> [options]       no Lean needed
 //   node harness/run.cjs --record <corpus.json> [traces] [seed]          write a corpus
 //
 // <target> is one of:
@@ -10,10 +10,16 @@
 //   chromium                              Chromium's native WebMCP (Blink feature flag)
 //   chromium:<path to chrome binary>      the same, for another Chromium build
 //
-// --known treats the result-serialization differences tracked in spec issue #361 as equal (and
-// counts them), so they don't hide other bugs later in the same trace.
+// options:
+//   --results <file.json>        also write the run as machine-readable results (results/README.md)
+//   --expectations <file.json>   expected divergences to use instead of expectations/<family>.json
+//   --no-expectations            treat every divergence as unexpected
+//
+// A divergence an expectation describes (expectations/README.md) is counted under its id and the
+// trace carries on; any other divergence ends the trace. The exit code is non-zero only if some
+// trace had an unexpected divergence.
 const { chromium } = require("playwright");
-const { spawn } = require("node:child_process");
+const { spawn, execFileSync } = require("node:child_process");
 const fs = require("node:fs");
 const http = require("node:http");
 const path = require("node:path");
@@ -21,20 +27,96 @@ const readline = require("node:readline");
 
 const root = path.join(__dirname, "..");
 const specSha = JSON.parse(fs.readFileSync(path.join(root, "spec", "anchors.json"), "utf8")).spec;
-const flags = new Set(process.argv.slice(2).filter((a) => a === "--known"));
-const argv = process.argv.slice(2).filter((a) => !flags.has(a));
-const recordPath = argv[0] === "--record" ? argv[1] : null;
-const replayPath = argv[1] === "--replay" ? argv[2] : null;
-const target = recordPath ? "none" : argv[0];
-const [countArg = "300", seedArg = "1"] = recordPath ? argv.slice(2) : replayPath ? [] : argv.slice(1);
+
+const opts = { replay: null, record: null, results: null, expectations: null, noExpectations: false };
+const positional = [];
+for (let a = process.argv.slice(2); a.length; ) {
+  const x = a.shift();
+  if (x === "--no-expectations") opts.noExpectations = true;
+  else if (/^--(replay|record|results|expectations)$/.test(x)) {
+    if (!a.length) throw new Error(`${x} needs a file`);
+    opts[x.slice(2)] = a.shift();
+  } else if (x.startsWith("--")) throw new Error(`unknown option ${x}`);
+  else positional.push(x);
+}
+const recordPath = opts.record;
+const replayPath = opts.replay;
+const target = recordPath ? "none" : positional[0];
+if (!target) throw new Error("usage: node harness/run.cjs <target> [traces] [seed] | --replay <corpus> | --record <corpus>");
+const [countArg = "300", seedArg = "1"] = recordPath ? positional : replayPath ? [] : positional.slice(1);
 const [kind, ...rest] = target.split(":");
 const targetArg = rest.join(":");
+if (!recordPath && !["polyfill", "chromium"].includes(kind)) throw new Error(`unknown target ${target}`);
 const polyfill = kind === "polyfill" ? fs.readFileSync(targetArg, "utf8") : "";
 const launchOptions =
   kind === "chromium"
     ? { args: ["--enable-blink-features=WebMCP"], ...(targetArg ? { executablePath: targetArg } : {}) }
     : {};
 const oraclePath = path.join(root, ".lake", "build", "bin", "oracle");
+
+// --- what is being tested ----------------------------------------------------------------
+const git = (dir, ...args) => {
+  try {
+    return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return null;
+  }
+};
+// The polyfill's package.json version and its checkout's commit, when it has them.
+function polyfillInfo(file) {
+  const dir = path.dirname(path.resolve(file));
+  let pkg = null;
+  for (let d = dir; d !== path.dirname(d) && !pkg; d = path.dirname(d)) {
+    const p = path.join(d, "package.json");
+    if (fs.existsSync(p)) pkg = JSON.parse(fs.readFileSync(p, "utf8"));
+  }
+  return { path: shownPath(file), package: pkg?.name ?? null, version: pkg?.version ?? null,
+    commit: git(dir, "rev-parse", "HEAD"), remote: git(dir, "remote", "get-url", "origin") };
+}
+// A local path as results files show it: relative to its git checkout, named after the
+// checkout's folder, so the file doesn't carry the machine's own paths.
+function shownPath(file) {
+  const top = git(path.dirname(path.resolve(file)), "rev-parse", "--show-toplevel");
+  return top ? path.join(path.basename(top), path.relative(top, path.resolve(file))) : path.basename(file);
+}
+
+// --- expected divergences ------------------------------------------------------------------
+// Compare dotted version numbers: "<160" holds for 157.0.8103.78.
+function versionMatches(range, version) {
+  if (!range) return true;
+  const m = /^(<=|>=|<|>|=)?\s*([\d.]+)$/.exec(range);
+  if (!m || !version) return false;
+  const a = version.split(".").map(Number);
+  const b = m[2].split(".").map(Number);
+  let c = 0;
+  for (let i = 0; i < Math.max(a.length, b.length) && !c; i++) c = Math.sign((a[i] || 0) - (b[i] || 0));
+  return { "<": c < 0, "<=": c <= 0, ">": c > 0, ">=": c >= 0, "=": c === 0 }[m[1] || "="];
+}
+function loadExpectations(version) {
+  if (opts.noExpectations) return { file: null, active: [], skipped: [] };
+  const file = opts.expectations ?? path.join(root, "expectations", `${kind}.json`);
+  if (!fs.existsSync(file)) {
+    if (opts.expectations) throw new Error(`no such expectations file ${file}`);
+    return { file: null, active: [], skipped: [] };
+  }
+  const all = JSON.parse(fs.readFileSync(file, "utf8")).expectations;
+  for (const e of all) {
+    for (const k of ["id", "description", "status", "match"]) {
+      if (!e[k]) throw new Error(`${file}: expectation ${e.id ?? "?"} has no ${k}`);
+    }
+    if (!e.issue && !e.spec) throw new Error(`${file}: ${e.id} has neither an issue nor a spec link`);
+    if (e.match.actual) {
+      new RegExp(e.match.actual);
+      new RegExp(e.match.want ?? "");
+    } else {
+      if (!Array.isArray(e.match.rewrite) || !e.match.rewrite.length) throw new Error(`${file}: ${e.id} has no rewrites`);
+      for (const r of e.match.rewrite) new RegExp(r.from, r.flags ?? "");
+    }
+  }
+  const active = all.filter((e) => versionMatches(e.versions, version));
+  return { file: path.relative(root, path.resolve(file)), active, skipped: all.filter((e) => !active.includes(e)) };
+}
+let expectations = { file: null, active: [], skipped: [] };
 
 // --- trace generator -------------------------------------------------------------------
 function rng(seed) {
@@ -508,43 +590,105 @@ async function runInPage(page, ops) {
 }
 
 // --- comparison ------------------------------------------------------------------------
-// Differences spec issue #361 tracks: Chromium stringifies primitive results instead of
-// JSON-encoding them, and turns undefined and "" into strings.
-function known361(want, got) {
-  if (/^result:".*"$/.test(want) && got === `result:${want.slice(8, -1)}`) return true;
-  if (want === 'result:""' && got === "result:Operation succeeded") return true;
-  if (want === "err:OperationError" && got === "result:undefined") return true;
-  return false;
+// Whether expectation e's conditions on the operation and the trace so far hold: every field in
+// `where` equals the op's, and each `after` entry equals the fields of some earlier op, or of an
+// action of an earlier `concurrent` op.
+function conditionsHold(e, op, before) {
+  const has = (o, fields) => Object.entries(fields).every(([k, v]) => o[k] === v);
+  const m = e.match;
+  if (m.where && !has(op, m.where)) return false;
+  const seen = before.flatMap((o) => [o, ...(o.actions ?? [])]);
+  return (m.after ?? []).every((c) => seen.some((o) => has(o, c)));
 }
-// `any:[...]` accepts any of the outcomes listed, and `all:[...]` compares the outcomes of a
-// `concurrent` operation's actions one by one.
-const same = (want, got, stats) => {
-  if (want === got) return true;
-  if (want.startsWith("any:")) return JSON.parse(want.slice(4)).some((w) => same(w, got, stats));
+// The expectation that explains getting `got` where the model says `want`: its op matches, its
+// conditions hold, and either applying its rewrites to want, in order, as
+// String.prototype.replace(new RegExp(from, flags), to), gives exactly got, or (with `actual`)
+// want matches the regex `want` and got the regex `actual`.
+function expectedBy(op, want, got, before) {
+  for (const e of expectations.active) {
+    const m = e.match;
+    if (![].concat(m.op).includes(op.op) || !conditionsHold(e, op, before)) continue;
+    const rewrite = (w) => m.rewrite.reduce((x, r) => x.replace(new RegExp(r.from, r.flags ?? ""), r.to), w);
+    if (m.actual ? new RegExp(m.want ?? "").test(want) && new RegExp(m.actual).test(got) : rewrite(want) === got) return e;
+  }
+  return null;
+}
+// Judge one outcome: null if `got` isn't allowed, else the expectations it took (none when it
+// agrees). `any:[...]` allows any of the outcomes listed (taking the one needing the fewest
+// expectations), and `all:[...]` judges a `concurrent` op's actions one by one, each as an op
+// of its own kind in the concurrent op's document.
+function judge(op, want, got, before) {
+  if (want === got) return [];
+  if (want.startsWith("any:")) {
+    let best = null;
+    for (const w of JSON.parse(want.slice(4))) {
+      const r = judge(op, w, got, before);
+      if (r && (!best || r.length < best.length)) best = r;
+    }
+    return best;
+  }
   if (want.startsWith("all:") && got.startsWith("all:")) {
     const [w, g] = [want, got].map((o) => JSON.parse(o.slice(4)));
-    return w.length === g.length && w.every((x, i) => same(x, g[i], stats));
+    if (w.length !== g.length || w.length !== op.actions.length) return null;
+    const { actions, ...rest } = op;
+    const ids = [];
+    for (let i = 0; i < w.length; i++) {
+      const r = judge({ ...rest, ...actions[i], op: actions[i].act }, w[i], g[i], before);
+      if (!r) return null;
+      ids.push(...r);
+    }
+    return ids;
   }
-  if (flags.has("--known") && known361(want, got)) {
-    if (stats) stats.known361++;
-    return true;
+  const e = expectedBy(op, want, got, before);
+  return e ? [e] : null;
+}
+// Compare one trace call by call. Expected divergences are tallied and the trace goes on, or, for
+// an expectation with `stop` (one that leaves the states apart), ends without failing. The first
+// unexpected one ends the comparison (bad is its index), since the model's state and the
+// implementation's may differ from there on.
+function compare(ops, want, got) {
+  const r = { agree: 0, expected: {}, bad: -1, stopped: -1 };
+  for (let i = 0; i < ops.length; i++) {
+    const es = judge(ops[i], want[i], got[i], ops.slice(0, i));
+    if (!es) {
+      r.bad = i;
+      break;
+    }
+    if (!es.length) {
+      r.agree++;
+      continue;
+    }
+    for (const e of es) r.expected[e.id] = (r.expected[e.id] || 0) + 1;
+    if (es.some((e) => e.stop)) {
+      r.stopped = i;
+      break;
+    }
   }
-  return false;
-};
+  return r;
+}
 const kindOf = (o) => (/^(tools|result|any|all):/.test(o) ? o.split(":")[0] : o);
-// The first disagreement in a run, as a category such as "execute: spec err:X / impl result".
-function mismatchKey(ops, want, got, stats) {
-  const bad = got.findIndex((g, i) => !same(want[i], g, stats));
+// The first unexpected disagreement in a run, as a category such as "execute: spec err:X / impl result".
+function mismatchKey(ops, want, got) {
+  const { bad } = compare(ops, want, got);
   return bad < 0 ? null : `${ops[bad].op}: spec ${kindOf(want[bad])} / impl ${kindOf(got[bad])}`;
 }
 
-// Remove op i. Removing a getTools() also removes the executes that use it and renumbers later ones.
+// Remove op i. Removing a getTools() (or a concurrent op with getTools() actions) also removes
+// the executes that use its results, and renumbers later ones. A concurrent op that loses an
+// execute goes as a whole, since its cancels refer to actions by position.
 function removeAt(ops, i) {
-  if (ops[i].op !== "getTools") return ops.filter((_, j) => j !== i);
-  const g = ops.slice(0, i).filter((o) => o.op === "getTools").length;
+  const calls = (o) => (o.op === "getTools" ? 1 : o.op === "concurrent" ? o.actions.filter((a) => a.act === "getTools").length : 0);
+  const first = ops.slice(0, i).reduce((n, o) => n + calls(o), 0);
+  const k = calls(ops[i]);
+  if (!k) return ops.filter((_, j) => j !== i);
+  const gone = (e) => e.call >= first && e.call < first + k;
+  const fix = (e) => (e.call >= first + k ? { ...e, call: e.call - k } : e);
   return ops.flatMap((o, j) => {
-    if (j === i || (o.op === "execute" && o.call === g)) return [];
-    return o.op === "execute" && o.call > g ? [{ ...o, call: o.call - 1 }] : [o];
+    if (j === i) return [];
+    if (o.op === "execute") return gone(o) ? [] : [fix(o)];
+    if (o.op !== "concurrent") return [o];
+    if (o.actions.some((a) => a.act === "execute" && gone(a))) return [];
+    return [{ ...o, actions: o.actions.map((a) => (a.act === "execute" ? fix(a) : a)) }];
   });
 }
 
@@ -566,7 +710,7 @@ async function shrink(page, ops, key) {
 }
 
 function printMismatch(key, f, label) {
-  console.log(`\nMISMATCH ${key}\n  ${label}:`);
+  console.log(`\nMISMATCH ${key} (first unexpected divergence in ${f.traces} traces)\n  ${label}:`);
   f.ops.forEach((o, i) => console.log(`   ${JSON.stringify(o)}\n      spec: ${f.want[i]}\n      impl: ${f.got[i]}`));
 }
 
@@ -591,36 +735,81 @@ function coverage(traces) {
     return;
   }
   const browser = await chromium.launch(launchOptions);
-  console.log(`target ${target}, browser ${browser.version()}`);
+  const browserVersion = browser.version();
+  const implementation =
+    kind === "polyfill"
+      ? { kind, ...polyfillInfo(targetArg) }
+      : { kind, executable: targetArg || "playwright-bundled", version: browserVersion };
+  expectations = loadExpectations(implementation.version);
+  console.log(`target ${target}, browser ${browserVersion}` +
+    (kind === "polyfill" ? `, polyfill ${implementation.version ?? "?"} at ${implementation.commit?.slice(0, 7) ?? "?"}` : ""));
+  console.log(expectations.file
+    ? `expectations ${expectations.file}: ${expectations.active.length} apply` +
+      (expectations.skipped.length ? `, ${expectations.skipped.length} not for this version` : "")
+    : "no expectations: every divergence counts as unexpected");
   const servers = await serveFrames();
   const page = await browser.newPage();
   const corpus = replayPath ? JSON.parse(fs.readFileSync(replayPath, "utf8")) : null;
   if (corpus && corpus.spec !== specSha) console.log(`warning: corpus is for spec ${corpus.spec}, model is at ${specSha}`);
   const traces = corpus ? corpus.traces : await generate(Number(countArg), Number(seedArg));
-  // Per mismatch category: the shrunk trace (live) or the shortest failing trace (replay).
+  // Per mismatch category: how many traces hit it first, and the shrunk trace (live) or the
+  // shortest failing trace cut after the divergence (replay).
   const failures = new Map();
-  const stats = { known361: 0 };
-  let opsRun = 0;
+  const counts = { traces: traces.length, calls: 0, compared: 0, agree: 0,
+    expected: Object.fromEntries(expectations.active.map((e) => [e.id, 0])), unexpected: 0 };
   for (const { ops, want } of traces) {
     const got = await runInPage(page, ops);
-    opsRun += ops.length;
-    const key = mismatchKey(ops, want, got, stats);
-    if (!key) continue;
+    const c = compare(ops, want, got);
+    counts.calls += ops.length;
+    counts.agree += c.agree;
+    for (const [id, n] of Object.entries(c.expected)) counts.expected[id] += n;
+    if (c.bad < 0) {
+      counts.compared += c.stopped < 0 ? ops.length : c.stopped + 1;
+      continue;
+    }
+    counts.compared += c.bad + 1;
+    counts.unexpected++;
+    const key = mismatchKey(ops, want, got);
+    const prev = failures.get(key);
     if (replayPath) {
-      // Keep the trace up to its first disagreement.
-      const end = got.findIndex((g, i) => !same(want[i], g)) + 1;
-      const f = { ops: ops.slice(0, end), want: want.slice(0, end), got: got.slice(0, end) };
-      const prev = failures.get(key);
-      if (!prev || f.ops.length < prev.ops.length) failures.set(key, f);
-    } else if (!failures.has(key)) {
+      const end = c.bad + 1;
+      const f = { traces: (prev?.traces ?? 0) + 1, ops: ops.slice(0, end), want: want.slice(0, end), got: got.slice(0, end) };
+      failures.set(key, !prev || f.ops.length < prev.ops.length ? f : { ...prev, traces: f.traces });
+    } else if (prev) {
+      prev.traces++;
+    } else {
       const small = await shrink(page, ops, key);
-      failures.set(key, { ops: small, want: await ask(small), got: await runInPage(page, small) });
+      failures.set(key, { traces: 1, ops: small, want: await ask(small), got: await runInPage(page, small) });
     }
   }
-  console.log(`${traces.length} traces, ${opsRun} operations`);
-  if (flags.has("--known")) console.log(`${stats.known361} results differed only as spec issue #361 describes`);
-  if (!failures.size) console.log("implementation agrees with the model on every operation");
+  console.log(`${counts.traces} traces, ${counts.calls} operations, ${counts.compared} compared: ` +
+    `${counts.agree} agree, ${counts.compared - counts.agree - counts.unexpected} expected divergences, ` +
+    `${counts.unexpected} unexpected`);
+  for (const [id, n] of Object.entries(counts.expected)) if (n) console.log(`  expected ${String(n).padStart(5)}  ${id}`);
+  if (!failures.size) console.log("no unexpected divergences");
   for (const [key, f] of failures) printMismatch(key, f, replayPath ? "shortest failing trace" : "minimal trace");
+  if (opts.results) {
+    const results = {
+      target: kind === "polyfill" ? `polyfill:${implementation.path}` : target,
+      implementation,
+      browser: { name: "chromium", version: browserVersion, playwright: require("playwright/package.json").version },
+      spec: specSha,
+      corpus: corpus
+        ? { file: path.relative(root, path.resolve(replayPath)), spec: corpus.spec, seed: corpus.seed ?? null, traces: traces.length }
+        : { generated: true, seed: Number(seedArg), traces: traces.length },
+      date: new Date().toISOString(),
+      expectations: expectations.file
+        ? { file: expectations.file, applied: expectations.active.map((e) => e.id), skipped: expectations.skipped.map((e) => e.id) }
+        : null,
+      counts,
+      unexpected: [...failures].map(([key, f]) => ({
+        key, traces: f.traces, trace: f.ops.map((op, i) => ({ op, model: f.want[i], actual: f.got[i] })),
+      })),
+    };
+    fs.mkdirSync(path.dirname(path.resolve(opts.results)), { recursive: true });
+    fs.writeFileSync(opts.results, JSON.stringify(results, null, 2) + "\n");
+    console.log(`wrote ${opts.results}`);
+  }
   await browser.close();
   servers.forEach((s) => s.close());
   oracle?.stdin.end();
