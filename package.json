@@ -1,6 +1,7 @@
 {
   "name": "webmcp-conformance",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "replay": "node harness/run.cjs"
   },

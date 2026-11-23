@@ -77,3 +77,7 @@ More detail:
 - [docs/spec-mapping.md](docs/spec-mapping.md): each spec anchor's definitions, theorems and examples
 - [docs/harness.md](docs/harness.md): targets, generating and shrinking traces, how outcomes are compared, expectations, the WPT export
 - [docs/maintaining.md](docs/maintaining.md): building the HTML docs, and keeping the model current with the spec
+
+## License
+
+[MIT](LICENSE)
