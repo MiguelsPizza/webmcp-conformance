@@ -62,7 +62,7 @@ const EDGE_NAMES = ["", "has space", "x".repeat(128), "x".repeat(129), "x".repea
   "ünï", "é", "Ａ", "ı", "a/b", "a\tb"];
 const SCHEMAS = [[4, "absent"], [3, "object"], [1, "viaToJSON"], [0.4, "unserializable"], [0.3, "nonObject"]];
 const BEHAVIORS = ["echo", "echo", "keys", "reject", "throwSync", "returnUndefined", "returnText",
-  "returnEmpty", "returnNull", "returnNumber", "returnCyclic"];
+  "returnEmpty", "returnNull", "returnNumber", "returnCyclic", "unregisterSelf", "unregisterSelf"];
 const ANNOTATIONS = [[5, null], [1, {}], [1, { readOnlyHint: true }],
   [1, { consequentialHint: true, debugging: true }]];
 
@@ -106,52 +106,123 @@ function genTrace(r) {
     const k = r();
     const doc = genDoc(r);
     const signal = () => SIGNALS_PER_DOC * doc + Math.floor(r() * SIGNALS_PER_DOC);
-    if (k < 0.35) {
+    const input = () => {
+      const n = Math.floor(r() * 10);
+      return choose(r, [[8, `obj:${n}`], [1, "omitted"], [1, `fn:${n}`], [0.6, "toJSONNumber"],
+        [0.6, "cyclic"]]);
+    };
+    if (k < 0.3) {
       ops.push({ op: "register", ...genTool(r), signal: r() < 0.5 ? signal() : null,
         exposedTo: genOrigins(r), doc });
-    } else if (k < 0.4) {
+    } else if (k < 0.33) {
       ops.push({ op: "registerAbortSync", ...genTool(r), signal: signal(), exposedTo: genOrigins(r), doc });
-    } else if (k < 0.5) {
+    } else if (k < 0.4) {
       ops.push({ op: "abort", signal: signal() });
-    } else if (k < 0.67) {
+    } else if (k < 0.58) {
       ops.push({ op: "getTools", fromOrigins: genOrigins(r), doc });
+    } else if (k < 0.8 || i < 3) {
+      ops.push({ op: "execute", pending: true, input: input(), rc: r(), ri: r(), rd: r() });
     } else {
-      const n = Math.floor(r() * 10);
-      const input = choose(r, [[8, `obj:${n}`], [1, "omitted"], [1, `fn:${n}`],
-        [0.6, "toJSONNumber"], [0.6, "cyclic"]]);
-      ops.push({ op: "execute", pending: true, input, rc: r(), ri: r(), rd: r() });
+      // Calls started from one script and awaited together.
+      const actions = [];
+      const n = 2 + Math.floor(r() * 3);
+      for (let j = 0; j < n; j++) {
+        const a = r();
+        if (a < 0.25) {
+          actions.push({ act: "register", ...genTool(r), signal: r() < 0.6 ? signal() : null,
+            exposedTo: genOrigins(r) });
+        } else if (a < 0.45) {
+          actions.push({ act: "abort", signal: signal(), aim: r() });
+        } else if (a < 0.55) {
+          actions.push({ act: "getTools", fromOrigins: genOrigins(r) });
+        } else if (a < 0.9 || j === 0) {
+          actions.push({ act: "execute", pending: true, input: input(), rc: r(), ri: r(),
+            signal: choose(r, [[5, "none"], [3, "live"], [1, "aborted"]]) });
+        } else {
+          actions.push({ act: "cancel", target: Math.floor(r() * j) });
+        }
+      }
+      ops.push({ op: "concurrent", actions, doc });
     }
   }
   return ops;
 }
 
 // Execute ops need a Tool that some earlier getTools() returned. The oracle's answers to the
-// getTools() calls say how many there were, so resolve them in a second pass.
-const toolCount = (o) => (o === "tools:" ? 0 : o.slice(6).split(";").length);
-// The executing document is the one that made the getTools() call or one same-origin with it,
-// which can reach the Tool through the other document's window.
-function resolveExecutes(ops, outcomes) {
-  const sizes = [];
-  const holders = [];
-  const out = [];
+// earlier operations say how many each getTools() call returned (the fewest, where the spec
+// allows several outcomes; none for one in a `concurrent` operation), so each execute is
+// resolved against the trace so far.
+const toolCount = (o) => {
+  if (o.startsWith("any:")) return Math.min(...JSON.parse(o.slice(4)).map(toolCount));
+  if (!o.startsWith("tools:")) return 0;
+  return o === "tools:" ? 0 : o.slice(6).split(";").length;
+};
+// The getTools() calls of `ops`, in order: how many Tools each surely returned, and which
+// document made it.
+function getToolsCalls(ops, outcomes) {
+  const calls = [];
   ops.forEach((op, i) => {
-    if (op.op === "getTools") {
-      sizes.push(outcomes[i] && outcomes[i].startsWith("tools:") ? toolCount(outcomes[i]) : 0);
-      holders.push(op.doc ?? 0);
+    if (op.op === "getTools") calls.push({ size: toolCount(outcomes[i]), doc: op.doc ?? 0 });
+    if (op.op === "concurrent") {
+      for (const a of op.actions) if (a.act === "getTools") calls.push({ size: 0, doc: op.doc });
     }
-    if (op.op === "execute" && op.pending) {
-      const avail = sizes.map((n, c) => [n, c]).filter(([n]) => n > 0);
-      if (!avail.length) return;
-      const [n, c] = avail[Math.floor(op.rc * avail.length)];
-      const callers = sameOrigin(holders[c]);
-      const doc = op.rd < 0.7 ? holders[c] : callers[Math.floor(((op.rd - 0.7) / 0.3) * callers.length)];
-      out.push({ op: "execute", call: c, index: Math.floor(op.ri * n), input: op.input, doc });
-      return;
-    }
-    out.push(op);
   });
-  return out;
+  return calls;
 }
+// Pick a Tool for a pending execute. The executing document is the one that made the
+// getTools() call or one same-origin with it, which can reach the Tool through the other
+// document's window; in a `concurrent` operation it is that operation's document.
+function pickTool(p, calls, doc) {
+  const avail = calls.map((c, i) => [c, i]).filter(([c]) => c.size > 0 &&
+    (doc === undefined || DOCS[c.doc].origin === DOCS[doc].origin));
+  if (!avail.length) return null;
+  const [c, call] = avail[Math.floor(p.rc * avail.length)];
+  return { call, index: Math.floor(p.ri * c.size), holder: c.doc };
+}
+function resolveOne(op, ops, outcomes) {
+  const calls = getToolsCalls(ops, outcomes);
+  if (op.op === "execute") {
+    const t = pickTool(op, calls);
+    if (!t) return null;
+    const callers = sameOrigin(t.holder);
+    const doc = op.rd < 0.7 ? t.holder : callers[Math.floor(((op.rd - 0.7) / 0.3) * callers.length)];
+    return { op: "execute", call: t.call, index: t.index, input: op.input, doc };
+  }
+  // An execute with no Tool to use becomes an abort, so later actions keep their positions. Most
+  // aborts after an execute aim at the signal its tool was registered with, so the races the
+  // spec's notes discuss come up often.
+  let aimed = null;
+  const actions = op.actions.map((a) => {
+    if (a.act === "abort") {
+      const { aim, ...rest } = a;
+      return aim < 0.6 && aimed != null ? { ...rest, signal: aimed } : rest;
+    }
+    if (a.act !== "execute") return a;
+    const t = pickTool(a, calls, op.doc);
+    if (!t) return { act: "abort", signal: SIGNALS_PER_DOC * op.doc };
+    const sig = registeredSignal(ops, outcomes, t);
+    if (sig != null && Math.floor(sig / SIGNALS_PER_DOC) === op.doc) aimed = sig;
+    return { act: "execute", call: t.call, index: t.index, input: a.input, signal: a.signal };
+  });
+  return { ...op, actions };
+}
+// The registration signal of the tool a picked Tool most likely names: the last successful
+// registration of that name in its source document.
+function registeredSignal(ops, outcomes, t) {
+  let k = -1;
+  const i = ops.findIndex((o) => o.op === "getTools" && ++k === t.call);
+  if (i < 0 || !outcomes[i].startsWith("tools:")) return null;
+  const entry = outcomes[i].slice(6).split(";")[t.index];
+  const name = entry.split("|")[0];
+  const at = /@(\d+)/.exec(entry);
+  const src = at ? Number(at[1]) : (ops[i].doc ?? 0);
+  for (let j = i - 1; j >= 0; j--) {
+    const o = ops[j];
+    if (o.op === "register" && o.name === name && (o.doc ?? 0) === src && outcomes[j] === "ok") return o.signal;
+  }
+  return null;
+}
+const needsTool = (op) => op.op === "execute" || op.op === "concurrent";
 
 // --- oracle ----------------------------------------------------------------------------
 // Not started when replaying, so a recorded corpus runs without a Lean toolchain.
@@ -177,11 +248,14 @@ async function generate(count, seed) {
   const r = rng(seed);
   const traces = [];
   for (let t = 0; t < count; t++) {
-    const raw = genTrace(r);
-    const first = await ask(raw.filter((o) => o.op !== "execute"));
-    let k = 0;
-    const sized = raw.map((o) => (o.op === "execute" ? null : first[k++]));
-    const ops = resolveExecutes(raw, sized);
+    const ops = [];
+    let known = [];
+    for (const op of genTrace(r)) {
+      if (!needsTool(op)) { ops.push(op); continue; }
+      if (known.length !== ops.length) known = await ask(ops);
+      const resolved = resolveOne(op, ops, known);
+      if (resolved) ops.push(resolved);
+    }
     traces.push({ ops, want: await ask(ops) });
   }
   return traces;
@@ -240,6 +314,13 @@ function pageRunner(origins, docOrigins) {
   };
   const tool = (op) => {
     const t = { name: op.name, execute: behaviors[op.behavior] };
+    // Aborts the tool's own registration signal while it runs, then resolves with its input.
+    if (op.behavior === "unregisterSelf") {
+      t.execute = async (input) => {
+        if (op.signal != null) controller(op.signal).abort();
+        return input;
+      };
+    }
     if (op.title !== null) t.title = op.title;
     if (op.description !== null) t.description = op.description;
     if (op.inputSchema !== "absent") t.inputSchema = schemas[op.inputSchema]();
@@ -275,7 +356,7 @@ function pageRunner(origins, docOrigins) {
     const legacy = !checkOrigin && t.source === undefined;
     const src = legacy || t.source === window ? all.indexOf(window) : all.indexOf(t.source);
     let suffix = src === all.indexOf(window) ? "" : `@${src < 0 ? String(t.source) : src}`;
-    if (checkOrigin && t.origin !== (src < 0 ? undefined : origins[docOrigins[src]])) {
+    if (checkOrigin && src >= 0 && t.origin !== origins[docOrigins[src]]) {
       suffix += `!origin=${String(t.origin)}`;
     }
     return [t.name, String(t.title), t.description, json(t.inputSchema), json(t.outputSchema),
@@ -297,7 +378,47 @@ function pageRunner(origins, docOrigins) {
     }
   };
   const done = (v) => (v === undefined ? "ok" : `fulfilled:${String(v)}`);
+  const result = (r) => (typeof r === "string" ? `result:${r}` : `result-non-string:${String(r)}`);
+  // The Tool, from whichever same-origin document's getTools() call returned it. (If the
+  // implementation's getTools() rejected or returned fewer tools than the spec's, this is
+  // undefined and the call fails with a TypeError.)
+  const handle = (op) => (windows()[op.holder].__webmcpHandles.get(op.call) || [])[op.index];
+  const getToolsOptions = (op) =>
+    op.fromOrigins === undefined ? [] : [{ fromOrigins: op.fromOrigins.map(originArg) }];
+  // Start every action of a `concurrent` operation from this one script, then await them all.
+  // `settle` makes each call before its first await, so all calls start before any settles.
+  const concurrent = async (op) => {
+    const execSignals = new Map();
+    const started = op.actions.map((a, i) => {
+      if (a.act === "register") {
+        const signal = a.signal == null ? null : controller(a.signal).signal;
+        return settle(() => mc.registerTool(tool(a), registerOptions(a, signal)), done);
+      } else if (a.act === "abort") {
+        controller(a.signal).abort();
+        return "ok";
+      } else if (a.act === "getTools") {
+        return settle(() => mc.getTools(...getToolsOptions(a)), (tools) => {
+          handles.set(a.slot, tools);
+          return "tools:" + tools.map((t) => view(t, true)).join(";");
+        });
+      } else if (a.act === "execute") {
+        const options = {};
+        if (a.signal !== "none") {
+          const ac = new AbortController();
+          if (a.signal === "aborted") ac.abort();
+          execSignals.set(i, ac);
+          options.signal = ac.signal;
+        }
+        const [input] = inputs(a.input);
+        return settle(() => mc.executeTool(handle(a), input, options), result);
+      }
+      execSignals.get(a.target)?.abort();
+      return "ok";
+    });
+    return "all:" + JSON.stringify(await Promise.all(started));
+  };
   window.__webmcpRun = async (op) => {
+    if (op.op === "concurrent") return concurrent(op);
     if (op.op === "register") {
       const signal = op.signal == null ? null : controller(op.signal).signal;
       return settle(() => mc.registerTool(tool(op), registerOptions(op, signal)), done);
@@ -316,18 +437,12 @@ function pageRunner(origins, docOrigins) {
       controller(op.signal).abort();
       return "ok";
     } else if (op.op === "getTools") {
-      const options = op.fromOrigins === undefined ? [] : [{ fromOrigins: op.fromOrigins.map(originArg) }];
-      return settle(() => mc.getTools(...options), (tools) => {
+      return settle(() => mc.getTools(...getToolsOptions(op)), (tools) => {
         handles.set(op.slot, tools);
         return "tools:" + tools.map((t) => view(t, op.doc !== undefined)).join(";");
       });
     } else {
-      // The Tool, from whichever same-origin document's getTools() call returned it.
-      // (If the implementation's getTools() rejected or returned fewer tools than the spec's,
-      // this passes undefined and the call fails with a TypeError.)
-      const t = (windows()[op.holder].__webmcpHandles.get(op.call) || [])[op.index];
-      return settle(() => mc.executeTool(t, ...inputs(op.input)),
-        (r) => (typeof r === "string" ? `result:${r}` : `result-non-string:${String(r)}`));
+      return settle(() => mc.executeTool(handle(op), ...inputs(op.input)), result);
     }
   };
 }
@@ -376,6 +491,16 @@ async function runInPage(page, ops) {
       holders.push(doc);
     } else if (op.op === "execute") {
       arg = { ...op, holder: holders[op.call] };
+    } else if (op.op === "concurrent") {
+      // Each getTools() action takes the next call index; executes refer to earlier ones only.
+      const before = holders.length;
+      arg = { ...op, actions: op.actions.map((a) => {
+        if (a.act === "execute") return { ...a, holder: holders[a.call] };
+        if (a.act !== "getTools") return a;
+        holders.push(doc);
+        return { ...a, slot: holders.length - 1 };
+      }) };
+      if (arg.actions.some((a) => a.act === "execute" && a.call >= before)) throw new Error("bad trace");
     }
     out.push(await frames[doc].evaluate((a) => window.__webmcpRun(a), arg));
   }
@@ -391,15 +516,22 @@ function known361(want, got) {
   if (want === "err:OperationError" && got === "result:undefined") return true;
   return false;
 }
+// `any:[...]` accepts any of the outcomes listed, and `all:[...]` compares the outcomes of a
+// `concurrent` operation's actions one by one.
 const same = (want, got, stats) => {
   if (want === got) return true;
+  if (want.startsWith("any:")) return JSON.parse(want.slice(4)).some((w) => same(w, got, stats));
+  if (want.startsWith("all:") && got.startsWith("all:")) {
+    const [w, g] = [want, got].map((o) => JSON.parse(o.slice(4)));
+    return w.length === g.length && w.every((x, i) => same(x, g[i], stats));
+  }
   if (flags.has("--known") && known361(want, got)) {
     if (stats) stats.known361++;
     return true;
   }
   return false;
 };
-const kindOf = (o) => (/^(tools|result):/.test(o) ? o.split(":")[0] : o);
+const kindOf = (o) => (/^(tools|result|any|all):/.test(o) ? o.split(":")[0] : o);
 // The first disagreement in a run, as a category such as "execute: spec err:X / impl result".
 function mismatchKey(ops, want, got, stats) {
   const bad = got.findIndex((g, i) => !same(want[i], g, stats));

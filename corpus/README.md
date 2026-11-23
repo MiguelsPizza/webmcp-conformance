@@ -17,6 +17,8 @@
 
 Operations may name the document they run in with `doc` (an index into the frame tree, `harnessDocs` in `WebMCP/Model.lean`; 0, the top-level document, when absent). `register` and `registerAbortSync` may carry `exposedTo` and `getTools` may carry `fromOrigins`, as lists of `origin:<n>` (origin `n`'s serialization), `path:<n>` (a URL of origin `n` with a path), `invalid` (not a URL) or `insecure` (`http://example.com`); absent means an empty list. Signal `n` belongs to document `n / 3`, and `execute`'s `doc` is the document that calls `executeTool()`, which may differ from the one whose `getTools()` returned the `Tool` (they are then same origin). Older corpora, without these members, parse and run the same way.
 
+A `concurrent` operation starts its `actions` from one script in document `doc` before awaiting any: `register`, `abort`, `getTools` and `execute` (with `signal` `none`, `live` or `aborted`) as above, and `cancel`, which aborts the execution signal of action `target`. Its outcome is `all:` and a JSON array of the actions' outcomes. Each `getTools` action counts as the next `getTools()` call for later `execute`s. Behavior `unregisterSelf` aborts the tool's own registration signal and resolves with its input. Where the spec allows several outcomes for an operation, `want[i]` is `any:` and a JSON array of them.
+
 Recording is deterministic: the same model, generator and seed give a byte-identical file. To regenerate after a model change:
 
 ```

@@ -34,7 +34,7 @@ def parseBehavior : String → Except String Behavior
   | "throwSync" => pure .throwSync | "returnUndefined" => pure .returnUndefined
   | "returnText" => pure .returnText | "returnEmpty" => pure .returnEmpty
   | "returnNull" => pure .returnNull | "returnNumber" => pure .returnNumber
-  | "returnCyclic" => pure .returnCyclic
+  | "returnCyclic" => pure .returnCyclic | "unregisterSelf" => pure .unregisterSelf
   | s => throw s!"bad behavior {s}"
 
 /-- Parse an input's wire value: `obj:<n>`, `fn:<n>`, `omitted`, `toJSONNumber` or `cyclic`. -/
@@ -95,6 +95,26 @@ def parseTool (j : Json) : Except String ModelContextTool := do
     annotations := ← (← nullable j "annotations").mapM parseAnnotations,
     behavior := ← parseBehavior (← (← field j "behavior").getStr?) }
 
+/-- Parse an execution signal's wire value: `none`, `live` or `aborted`. -/
+def parseExecSignal : String → Except String ExecSignal
+  | "none" => pure .none | "live" => pure .live | "aborted" => pure .aborted
+  | s => throw s!"bad execution signal {s}"
+
+/-- Parse one action of a `concurrent` operation. -/
+def parseAction (j : Json) : Except String Action := do
+  match ← (← field j "act").getStr? with
+  | "register" =>
+    pure (.register (← parseTool j) (← (← nullable j "signal").mapM (·.getNat?))
+      (← parseOriginArgs j "exposedTo"))
+  | "abort" => pure (.abort (← (← field j "signal").getNat?))
+  | "getTools" => pure (.getTools (← parseOriginArgs j "fromOrigins"))
+  | "execute" =>
+    pure (.execute (← (← field j "call").getNat?) (← (← field j "index").getNat?)
+      (← parseInput (← (← field j "input").getStr?))
+      (← parseExecSignal (← (← field j "signal").getStr?)))
+  | "cancel" => pure (.cancel (← (← field j "target").getNat?))
+  | a => throw s!"bad action {a}"
+
 /-- Parse one operation. -/
 def parseOp (j : Json) : Except String Op := do
   match ← (← field j "op").getStr? with
@@ -109,6 +129,8 @@ def parseOp (j : Json) : Except String Op := do
   | "execute" =>
     pure (.execute (← (← field j "call").getNat?) (← (← field j "index").getNat?)
       (← parseInput (← (← field j "input").getStr?)) (← parseDoc j))
+  | "concurrent" =>
+    pure (.concurrent (← (← (← field j "actions").getArr?).toList.mapM parseAction) (← parseDoc j))
   | o => throw s!"bad op {o}"
 
 /-- Parse one line: a JSON array of operations. -/
@@ -116,8 +138,9 @@ def parseLine (line : String) : Except String (List Op) := do
   let arr ← (← Json.parse line).getArr?
   arr.toList.mapM parseOp
 
-/-- The outcomes of a line, as the JSON array of strings the harness reads. -/
-def renderOutcomes (outcomes : List Outcome) : String :=
-  (Json.arr (outcomes.map (Json.str ·.render)).toArray).compress
+/-- The outcomes of a line, as the JSON array of strings the harness reads: for each operation,
+    its outcome, or `any:[...]` when the spec allows several (`renderSet`). -/
+def renderOutcomes (outcomes : List (List Outcome)) : String :=
+  (Json.arr (outcomes.map (Json.str ∘ renderSet)).toArray).compress
 
 end WebMCP.Oracle

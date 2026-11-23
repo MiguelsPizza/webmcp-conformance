@@ -18,6 +18,5 @@ def main : IO Unit := do
     if line.isEmpty then break
     if line.trimAscii.isEmpty then continue
     let ops ← IO.ofExcept (Oracle.parseLine line)
-    let (_, outcomes) := run {} ops
-    stdout.putStrLn (Oracle.renderOutcomes outcomes)
+    stdout.putStrLn (Oracle.renderOutcomes (explore [{}] ops))
     stdout.flush

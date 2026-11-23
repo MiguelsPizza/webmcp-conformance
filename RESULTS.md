@@ -58,3 +58,23 @@ $ echo '[{"op":"register","name":"a","title":null,"description":"d","inputSchema
 ```
 
 `call` and `index` pick the `Tool` by which `getTools()` call returned it and its position in that list.
+
+## 2026-11-23: frames, origins and calls in flight
+
+The model now covers a five-document frame tree on three origins (`exposedTo`, `fromOrigins`, permissions policy) and calls started together without awaiting (`concurrent`). Run against the re-recorded corpus and the hand-written traces below, with Playwright 1.63.0's Chromium 157.0.8103.78 (WebMCP flag on), polyfill main (4c01562) and polyfill PR #25 (63ddbfd). Cross-origin exposure itself (which frames' tools `getTools()` returns, `SecurityError` for bad origins, `NotAllowedError` without `allow="tools"`) matches in both polyfill builds; in Chromium 157 it is hidden behind the version lag above. New kinds of divergence:
+
+1. **Aborting `executeTool()`'s signal stops the tool's callback** (polyfill main and PR #25). The spec rejects the promise with `AbortError` and cancels in parallel, but nothing stops the queued "tool execute steps", so in every order the spec allows, the callback still runs. Chromium 157 runs it. Here the callback unregisters its own tool, so the last `getTools()` shows whether it ran. *Possibly a spec issue*: the spec may not mean the callback to run.
+   ```
+   [{"op":"register","name":"a","title":null,"description":"d","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"unregisterSelf","signal":0},{"op":"getTools"},{"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"obj:1","signal":"live"},{"act":"cancel","target":0}]},{"op":"getTools"}]
+   spec:     ["ok","tools:a||d|null|null|null","all:[\"err:AbortError\",\"ok\"]","tools:"]
+   polyfill: ["ok","tools:a||d|null|null|null","all:[\"err:AbortError\",\"ok\"]","tools:a||d|null|null|null"]
+   ```
+2. **Permissions policy is checked after the arguments** (polyfill main and PR #25). In a frame whose `<iframe>` doesn't delegate "tools", `registerTool()` with an invalid name, schema or `exposedTo` rejects with that error, but the spec checks "allowed to use" first and rejects with `NotAllowedError`. Web IDL conversion errors still come first, as both expect.
+   ```
+   [{"op":"register","name":"b","title":null,"description":"d","inputSchema":"unserializable","outputSchema":"absent","annotations":null,"behavior":"echo","signal":null,"doc":4}]
+   spec: ["err:NotAllowedError"]   polyfill: ["err:TypeError"]
+   ```
+3. **`getTools()` and `registerTool()` sometimes never settle in a same-origin `<iframe>` that embeds a cross-origin frame** (Chromium 157). Out of 100 fresh page loads, `[{"op":"getTools","fromOrigins":[],"doc":1}]` timed out after 5 seconds about 5 times; documents 0, 2 and 3 never did.
+4. **`Tool` has no `source`** (Chromium 157, which returns a dictionary with `window` instead, and polyfill main). Tools from other frames therefore print as `@undefined`. *Version lag*; PR #25 has `source`.
+
+Starting `executeTool()` and then unregistering and re-registering its tool in the same script runs the new tool in Chromium 157 and polyfill main, and rejects with `NotFoundError` in PR #25: the stale-handle divergence above, showing up for calls in flight too.

@@ -14,9 +14,10 @@ def tool (name : String) (b : Behavior := .echo) : ModelContextTool :=
   { name, title := none, description := some "d", inputSchema := .absent,
     outputSchema := .absent, annotations := none, behavior := b }
 
-/-- Outcomes of running `ops` from an empty model context, as the harness prints them. -/
+/-- Outcomes of running `ops` from an empty model context, as the harness prints them: one per
+    operation, or `any:[...]` where the spec allows several. -/
 def outcomes (ops : List Op) : List String :=
-  (run {} ops).2.map Outcome.render
+  (explore [{}] ops).map renderSet
 
 -- `listed-and-runs`: a registered tool is listed and runs; an omitted title is exposed as ""
 -- and absent schemas and annotations as null.
@@ -104,5 +105,69 @@ have origin 1, where 4's `<iframe>` doesn't delegate "tools". -/
     .execute 0 0 (.obj 2) 1, .execute 0 0 (.obj 2) 2, .execute 0 0 (.obj 2) 4] ==
   ["ok", "tools:chart||d|null|null|null@3", "result:{\"n\":2}", "err:NotFoundError",
    "err:NotAllowedError"]
+
+/-! ### Calls in flight at the same time
+
+`Op.concurrent` starts its actions from one script without awaiting them. `allOf` is how the
+harness prints their outcomes, and `anyOf` a set of outcomes the spec allows. -/
+
+/-- The outcomes of an `Op.concurrent`'s actions, as the harness prints them. -/
+def allOf (l : List String) : String := "all:" ++ jsonArray l
+
+/-- Outcomes the spec allows for one operation, any one of which is right. -/
+def anyOf (l : List String) : String := "any:" ++ jsonArray l
+
+/-- `a`, as `getTools()` shows it. -/
+def viewA : String := "tools:a||d|null|null|null"
+
+-- `concurrent-unregistration-execution-race`, the spec's own example with the calls in flight
+-- together: `executeTool()` on the old `Tool`, then unregistering it and registering a new `a`
+-- in the same script. The execution can't run the new tool in any order; the new `a` is
+-- registered afterwards.
+#guard outcomes [.register (tool "a") (some 0), .getTools,
+    .concurrent [.execute 0 0 (.obj 10) .none, .abort 0, .register (tool "a") none []], .getTools] ==
+  ["ok", viewA, allOf ["err:NotFoundError", "ok", "ok"], viewA]
+
+-- `getTools-race`: `getTools()` reads the tool maps in parallel, so it may see the state at any
+-- point after its call. `registerTool()` adds its tool synchronously, so a `getTools()` started
+-- after it can't miss it until the abort, and the abort rejects the registration first.
+#guard outcomes [.concurrent [.register (tool "a") (some 0) [], .getTools [], .abort 0]] ==
+  [anyOf [allOf ["err:AbortError", viewA, "ok"], allOf ["err:AbortError", "tools:", "ok"]]]
+#guard outcomes [.concurrent [.getTools [], .register (tool "a") none []]] ==
+  [anyOf [allOf ["tools:", "ok"], allOf [viewA, "ok"]]]
+
+-- `self-unregistration`: a tool whose callback unregisters it still completes, and is gone
+-- afterwards. A `getTools()` in flight may see it before or after.
+#guard outcomes [.register (tool "a" .unregisterSelf) (some 0), .getTools, .execute 0 0 (.obj 1),
+    .getTools] ==
+  ["ok", viewA, "result:{\"n\":1}", "tools:"]
+#guard outcomes [.register (tool "a" .unregisterSelf) (some 0), .getTools,
+    .concurrent [.execute 0 0 (.obj 1) .none, .getTools []]] ==
+  ["ok", viewA, anyOf [allOf ["result:{\"n\":1}", viewA], allOf ["result:{\"n\":1}", "tools:"]]]
+
+-- `execution-order`: the tool execute steps of two calls are queued from separate parallel
+-- steps, so either may run first; the second finds the tool gone.
+#guard outcomes [.register (tool "a" .unregisterSelf) (some 0), .getTools,
+    .concurrent [.execute 0 0 (.obj 1) .none, .execute 0 0 (.obj 2) .none]] ==
+  ["ok", viewA, anyOf [allOf ["result:{\"n\":1}", "err:NotFoundError"],
+    allOf ["err:NotFoundError", "result:{\"n\":2}"]]]
+
+-- `register-resolve-race`: a callback that aborts a registration signal may run before or
+-- after the task that resolves a registration made with it in the same script.
+#guard outcomes [.register (tool "a" .unregisterSelf) (some 0), .getTools,
+    .concurrent [.execute 0 0 (.obj 1) .none, .register (tool "b") (some 0) []]] ==
+  ["ok", viewA, anyOf [allOf ["result:{\"n\":1}", "ok"],
+    allOf ["result:{\"n\":1}", "err:AbortError"]]]
+
+-- `pending-execution-removal-race`: aborting an execution's signal rejects it at once, though
+-- the callback still runs (here it unregisters its tool). A signal aborted before the call
+-- rejects it before anything runs; one given to a call that already failed changes nothing.
+#guard outcomes [.register (tool "a" .unregisterSelf) (some 0), .getTools,
+    .concurrent [.execute 0 0 (.obj 1) .live, .cancel 0], .getTools] ==
+  ["ok", viewA, allOf ["err:AbortError", "ok"], "tools:"]
+#guard outcomes [.register (tool "a" .unregisterSelf) (some 0), .getTools,
+    .concurrent [.execute 0 0 (.obj 1) .aborted, .execute 0 0 .unserializable .live, .cancel 1],
+    .getTools] ==
+  ["ok", viewA, allOf ["err:AbortError", "err:TypeError", "ok"], viewA]
 
 end WebMCP.Examples

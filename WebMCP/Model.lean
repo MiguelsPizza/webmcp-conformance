@@ -11,6 +11,7 @@ origins (`harnessDocs`):
 * `executeTool()`: lookup by tool id in the `Tool`'s source document, the exposure check, input
   serialization, "invalid input", and how the callback's outcome becomes a result string or an
   error
+* calls started together without awaiting, with every outcome the spec's ordering allows
 
 Spec: <https://webmachinelearning.github.io/webmcp/> at upstream commit recorded in
 `spec/anchors.json`. Every definition names the algorithm it models with a `Spec:` line giving
@@ -22,8 +23,18 @@ algorithms changes upstream, so the model cannot silently fall behind.
 The model is deliberately smaller than the spec. Each simplification below is either harmless
 for this slice or listed as not covered in the README:
 
-* Realms, tasks and events are not modelled. Calls are awaited one at a time, except
-  `Op.registerAbortSync`, which aborts the signal before the registration promise settles.
+* Realms and events are not modelled. Calls are awaited one at a time, except
+  `Op.registerAbortSync`, which aborts the signal before the registration promise settles, and
+  `Op.concurrent`, which starts several calls from one script before awaiting them. For those,
+  each call's work is split into its synchronous method steps, its in-parallel steps and its
+  queued tasks, at the granularity where an order the spec leaves open can change an outcome:
+  when `getTools()` reads the tool maps, the order in which queued "tool execute steps" run, and
+  whether a callback's abort comes before a registration's resolving task (see `concurrent`).
+  Where several orders are allowed, `step` returns every outcome. The execution `signal` is
+  only given in `Op.concurrent`; the callback's own `signal`, the pending tool executions maps
+  and `toolcancel` are not modelled, since no outcome the harness sees depends on them.
+* A callback only settles as its `Behavior` says, except that an `unregisterSelf` tool aborts its
+  own registration signal first.
 * Author-supplied values are drawn from small enumerations (`Schema`, `Behavior`, `Input`,
   `Annotations`) whose JSON serializations are fixed. The harness builds the matching
   JavaScript values.
@@ -66,6 +77,8 @@ for this slice or listed as not covered in the README:
 | invoke the execute callback | `invokeExecuteCallback`, `callbackResult` |
 | tool execution error, its corresponding exception name | `ToolExecutionError`, `ToolExecutionError.exceptionName` |
 | `executeTool()`'s `completionSteps` | `completionOutcome` |
+| calls started from one script, then awaited | `Op.concurrent`, `Action`, `concurrent` |
+| a call's synchronous steps; its in-parallel steps and tasks | `syncAction`, `syncPhase`; `Pending`, `asyncStep`, `asyncPhase`, `callChoices` |
 
 `Tool` alone is not used as a Lean name: the spec's `Tool` object is split here into the
 `ToolObject` a caller holds and the `ToolView` it exposes, and a bare `Tool` would read as either,
@@ -262,6 +275,9 @@ inductive Behavior where
   | returnNumber
   /-- Resolves with an object with a cycle, which JSON cannot serialize. -/
   | returnCyclic
+  /-- Aborts the signal its own tool was registered with, so the tool unregisters itself while
+      it runs, then resolves with the input object it received. -/
+  | unregisterSelf
   deriving Repr, DecidableEq
 
 /-- The `inputObject` a caller passes to `executeTool()`. -/
@@ -342,7 +358,7 @@ structure ToolDef where
   doc : Nat
   /-- "exposed origins" -/
   exposedOrigins : List Origin
-  deriving Repr
+  deriving Repr, DecidableEq
 
 /-- A `Tool` object returned by `getTools()`: the "tool id" it identifies, its name, the
     document it came from and that document's origin. -/
@@ -394,6 +410,32 @@ structure State where
       `ToolDef.signal`. It is kept so that `Proofs.lean` can state the spec's `Assert` in
       "unregister a tool" about the steps the spec actually runs. -/
   abortSteps : List (Nat × Nat) := []
+  deriving Repr, DecidableEq
+
+/-- The `signal` option of an `executeTool()` started in an `Op.concurrent`. -/
+inductive ExecSignal where
+  /-- No `signal`. -/
+  | none
+  /-- A signal that a later `Action.cancel` may abort. -/
+  | live
+  /-- A signal that was aborted before the call. -/
+  | aborted
+  deriving Repr, DecidableEq
+
+/-- One call started in an `Op.concurrent`, without awaiting it. -/
+inductive Action where
+  /-- `registerTool(t, {signal, exposedTo})`. -/
+  | register (t : ModelContextTool) (signal : Option Nat) (exposedTo : List OriginArg)
+  /-- Abort a registration signal. -/
+  | abort (signal : Nat)
+  /-- `getTools({fromOrigins})`. -/
+  | getTools (fromOrigins : List OriginArg)
+  /-- `executeTool(tool, input, {signal})` with the `index`-th `Tool` of the `call`-th
+      `getTools()` before this operation. -/
+  | execute (call index : Nat) (input : Input) (signal : ExecSignal)
+  /-- Abort the execution signal of the `target`-th action, if it is an `execute` with a `live`
+      signal that has started. -/
+  | cancel (target : Nat)
   deriving Repr
 
 /-- One call the harness makes, in document `doc` (0, the top-level document, when not given). -/
@@ -412,6 +454,9 @@ inductive Op where
   /-- `await executeTool(tool, input)` with the `index`-th `Tool` of the `call`-th `getTools()`,
       whichever document made that call. -/
   | execute (call index : Nat) (input : Input) (doc : Nat := 0)
+  /-- Start each action in turn from one script in document `doc`, without awaiting any, then
+      await them all. -/
+  | concurrent (actions : List Action) (doc : Nat := 0)
   deriving Repr
 
 /-- What a call settles with. -/
@@ -427,7 +472,9 @@ inductive Outcome where
   /-- The trace refers to a `Tool` no earlier `getTools()` returned. The harness never sends
       such a trace, and treats this outcome as its own bug. -/
   | invalidRequest
-  deriving Repr, DecidableEq
+  /-- The outcomes of the calls of an `Op.concurrent`, one per action, in order. -/
+  | all (os : List Outcome)
+  deriving Repr, BEq
 
 /-- One `Tool` as the harness prints it: its members separated by `|`, then `@<document>` when
     its `source` is not the caller's own window. -/
@@ -437,13 +484,34 @@ def ToolView.render (v : ToolView) : String :=
   | some d => "@" ++ toString d
   | none   => ""
 
-/-- An outcome as the harness prints it. -/
+/-- A string as a JSON string literal. -/
+def jsonString (str : String) : String :=
+  "\"" ++ String.join (str.toList.map fun c =>
+    if c == '"' then "\\\"" else if c == '\\' then "\\\\"
+    else if c == '\n' then "\\n" else if c == '\t' then "\\t"
+    else if c.toNat < 32 then "\\u00" ++ (if c.toNat < 16 then "0" else "1") ++
+      String.singleton (Nat.digitChar (c.toNat % 16))
+    else String.singleton c) ++ "\""
+
+/-- A list of strings as a JSON array. -/
+def jsonArray (l : List String) : String :=
+  "[" ++ ",".intercalate (l.map jsonString) ++ "]"
+
+/-- An outcome as the harness prints it. The outcomes of an `Op.concurrent` are printed as
+    `all:` and a JSON array of each action's outcome. -/
 def Outcome.render : Outcome → String
   | .ok             => "ok"
   | .err e          => "err:" ++ e.name
   | .tools ts       => "tools:" ++ ";".intercalate (ts.map ToolView.render)
   | .result j       => "result:" ++ j
   | .invalidRequest => "invalid-request"
+  | .all os         => "all:" ++ jsonArray (os.attach.map fun ⟨o, _⟩ => o.render)
+
+/-- The outcomes the spec allows for one call, as the harness compares them: the outcome itself
+    when there is one, or `any:` and a JSON array of every allowed outcome. -/
+def renderSet : List Outcome → String
+  | [o] => o.render
+  | os  => "any:" ++ jsonArray (os.map Outcome.render)
 
 /-- A code point allowed in a tool name: ASCII alphanumeric, `_`, `-` or `.`. -/
 def validNameChar (c : Char) : Bool :=
@@ -616,6 +684,7 @@ def callbackResult (b : Behavior) (input : Input) (json : String) :
   match b with
   -- "If toolPromise was fulfilled with value v": serialize v.
   | .echo            => .ok json
+  | .unregisterSelf  => .ok json
   | .keys            => .ok input.keysJSON
   | .returnText      => .ok "\"hi\""
   | .returnEmpty     => .ok "\"\""
@@ -636,6 +705,23 @@ def invokeExecuteCallback (d : ToolDef) (input : Input) (json : String) :
   -- "If inputObject is not an Object, then run completionSteps given null and invalid input"
   if !input.parsesToObject then .error .invalidInput
   else callbackResult d.behavior input json
+
+/-- The registration signal the author's callback aborts while it runs, if any: an
+    `unregisterSelf` tool's own, once its input has parsed to an Object and the callback is
+    invoked. -/
+def callbackAborts (d : ToolDef) (input : Input) : Option Nat :=
+  if d.behavior == .unregisterSelf && input.parsesToObject then d.signal else none
+
+/-- What running the author's callback does to the page: an `unregisterSelf` tool aborts its
+    registration signal, which unregisters it (and every other tool registered with that signal).
+    The execution itself goes on: "Unregistering a tool does not cancel an execution that has
+    already reached the invoke the execute callback steps, even when the ToolExecuteCallback
+    itself performs the unregistration."
+    Spec: #model-context-unregister-a-tool -/
+def callbackEffect (s : State) (d : ToolDef) (input : Input) : State :=
+  match callbackAborts d input with
+  | some g => (unregisterBySignal s g).1
+  | none   => s
 
 /-- Look a tool id up in document `doc`'s tool map. -/
 def lookup (s : State) (doc toolId : Nat) : Option ToolDef :=
@@ -658,9 +744,18 @@ def completionOutcome : Except ToolExecutionError String → Outcome
   | .ok r    => .result r
   | .error e => .err e.exceptionName
 
-/-- `executeTool()` in document `doc`. The target document is the `Tool`'s `source`; every
-    document is in the caller's traversable navigable and fully active, and no origin is opaque,
-    so the checks for those never fail.
+/-- The page after "tool execute steps" ran: the callback's effect, if the tool was found.
+    Spec: #tool-execute-steps -/
+def toolExecuteEffect (s : State) (targetDoc toolId : Nat) (input : Input) : State :=
+  match lookup s targetDoc toolId with
+  | none   => s
+  | some d => callbackEffect s d input
+
+/-- `executeTool()` in document `doc`, awaited, with no `signal`. The target document is the
+    `Tool`'s `source`; every document is in the caller's traversable navigable and fully active,
+    and no origin is opaque, so the checks for those never fail. Awaited on its own, nothing runs
+    between its in-parallel lookup and the queued "tool execute steps", so both see the same tool
+    map. `concurrent` models what can happen in between.
     Spec: #dom-modelcontext-executetool -/
 def executeTool (s : State) (call index : Nat) (input : Input) (doc : Nat := 0) :
     State × Outcome :=
@@ -685,22 +780,211 @@ def executeTool (s : State) (call index : Nat) (input : Input) (doc : Nat := 0) 
         if !toolIsExposed (docOrigin s tool.source) d.exposedOrigins (docOrigin s doc) then
           (s, .err .notFound)
         -- Queue a task to run the tool execute steps.
-        else (s, completionOutcome (toolExecuteSteps s tool.source tool.id input json))
+        else (toolExecuteEffect s tool.source tool.id input,
+              completionOutcome (toolExecuteSteps s tool.source tool.id input json))
 
-/-- One call. -/
-def step (s : State) : Op → State × Outcome
-  | .register t sig exp doc          => registerTool s t sig exp doc
-  | .registerAbortSync t sig exp doc => registerAbortSync s t sig exp doc
-  | .abort sig                       => unregisterBySignal s sig
-  | .getTools fo doc                 => getTools s fo doc
-  | .execute c i input doc           => executeTool s c i input doc
 
-/-- A sequence of calls, each awaited before the next. -/
-def run (s : State) : List Op → State × List Outcome
-  | [] => (s, [])
+/-! ### Calls that run at the same time
+
+`Op.concurrent` starts several calls from one script and only then awaits them. Each call's
+method steps run synchronously, in order; the rest of its work runs "in parallel" or in tasks
+queued on the webmcp task source, after the script. Where the spec leaves the relative order of
+that work open, `concurrent` gives one branch per order, and the harness accepts any of their
+outcomes:
+
+* `registerTool()` adds the tool synchronously and resolves from a queued task, so a signal
+  aborted before that task runs rejects it with `AbortError`. An abort in the same script always
+  comes first; one made by a tool's callback (an `unregisterSelf` tool) may come either side.
+* `getTools()` reads the tool maps in parallel, at any point after its call: any state from its
+  call onwards, through the end of the script and every queued tool execution.
+* `executeTool()` looks the tool up in parallel and then queues "tool execute steps", which look
+  it up again when the task runs, after the script. Tool ids are never reused, so the call runs
+  the tool exactly when it is still registered when its task runs. The tasks of different calls
+  run in any order, since each is queued from its own parallel steps.
+* Aborting an execution's `signal` rejects its promise at once with `AbortError`. Cancelling
+  runs in parallel too, and doesn't stop the queued "tool execute steps", so the callback still
+  runs and its effect still happens. -/
+
+/-- A call of an `Op.concurrent` after the script: settled, or waiting for its parallel steps
+    and tasks. -/
+inductive Pending where
+  /-- Settled during the script (or not a promise). -/
+  | settled (o : Outcome)
+  /-- A rejected `getTools()`: no `Tool` objects. -/
+  | readFailed (e : Err)
+  /-- A registered tool's promise, with its signal; `aborted` once that signal fired during the
+      script, which rejects the promise before its resolving task can run. -/
+  | registered (signal : Option Nat) (aborted : Bool)
+  /-- A `getTools()` that may read any state from index `since` of the script's states on. -/
+  | reading (fromOrigins : List OriginArg) (since : Nat)
+  /-- An `executeTool()` waiting for its tool execute steps; `cancelled` once its signal was
+      aborted, `cancellable` if it has a signal. -/
+  | executing (tool : ToolObject) (input : Input) (json : String) (cancelled cancellable : Bool)
+  /-- An `execute` naming a `Tool` no earlier `getTools()` returned. -/
+  | invalid
+  deriving Repr
+
+/-- A `getTools()` call's pending read, starting at the `n`-th state of the script. -/
+def Pending.since (p : Pending) (n : Nat) : Pending :=
+  match p with
+  | .reading fo _ => .reading fo n
+  | p => p
+
+/-- The synchronous part of one action, in document `doc`, given the calls started before it:
+    the state after it, its pending call, and the earlier calls after it. -/
+def syncAction (doc : Nat) (s : State) (ps : List Pending) : Action → State × Pending × List Pending
+  | .register t sig exp =>
+    match registerToolChecks s t sig exp doc with
+    | some e => (s, .settled (.err e), ps)
+    | none   => (addTool s t sig exp doc, .registered sig false, ps)
+  | .abort g =>
+    -- The abort steps reject each promise registered with `g` that hasn't settled yet.
+    ((unregisterBySignal s g).1, .settled .ok, ps.map fun p => match p with
+      | .registered (some g') false => if g' == g then .registered (some g') true else p
+      | p => p)
+  | .getTools fo =>
+    if !docAllowed s doc then (s, .readFailed .notAllowed, ps)
+    else match parseOrigins fo with
+    | none   => (s, .readFailed .security, ps)
+    | some _ => (s, .reading fo 0, ps)
+  | .execute call k x sg =>
+    match (s.toolObjects[call]?).bind (·[k]?) with
+    | none => (s, .invalid, ps)
+    | some tool =>
+      if !docAllowed s doc then (s, .settled (.err .notAllowed), ps)
+      else match x.serialize with
+      | none => (s, .settled (.err .typeError), ps)
+      | some json =>
+        -- "If signal is aborted, then return a promise rejected with signal's abort reason."
+        if sg == .aborted then (s, .settled (.err .abort), ps)
+        else (s, .executing tool x json false (sg == .live), ps)
+  | .cancel k =>
+    -- The abort steps: "Reject promise with signal's abort reason."
+    (s, .settled .ok, ps.mapIdx fun i p => match p with
+      | .executing tool x json false true => if i == k then .executing tool x json true true else p
+      | p => p)
+
+/-- The script of an `Op.concurrent`: every action's synchronous part, in order. Returns the
+    state at the end, the pending calls, and the state in which each action was made followed
+    by the state at the end. -/
+def syncPhase (doc : Nat) : State → List Pending → List State → List Action →
+    State × List Pending × List State
+  | s, ps, hist, [] => (s, ps, hist ++ [s])
+  | s, ps, hist, a :: as =>
+    let (s', p, ps') := syncAction doc s ps a
+    -- A `getTools()` can read the state it was called in, or any later one.
+    syncPhase doc s' (ps' ++ [p.since hist.length]) (hist ++ [s]) as
+
+/-- The queued "tool execute steps" of the `i`-th call, if it is an `executeTool()` still
+    waiting: its outcome, the state after it, and the registration signal its callback aborted.
+    Spec: #dom-modelcontext-executetool
+    Spec: #tool-execute-steps -/
+def asyncStep (doc : Nat) (s : State) (p : Pending) : State × Option Outcome × Option Nat :=
+  match p with
+  | .executing tool x json cancelled _ =>
+    let (s', o, g) := match lookup s tool.source tool.id with
+      -- "If toolMap[toolId] does not exist, then run completionSteps given null and tool not
+      -- found": whether the in-parallel lookup or the task's finds it gone.
+      | none => (s, Outcome.err .notFound, none)
+      | some d =>
+        if !toolIsExposed (docOrigin s tool.source) d.exposedOrigins (docOrigin s doc) then
+          (s, .err .notFound, none)
+        else (callbackEffect s d x, completionOutcome (invokeExecuteCallback d x json),
+              callbackAborts d x)
+    -- A cancelled call was already rejected with the abort reason.
+    (s', some (if cancelled then .err .abort else o), g)
+  | _ => (s, none, none)
+
+/-- The tasks of the waiting `executeTool()` calls, run in the order `order`. Returns the state
+    at the end, each call's outcome, the state after each task, and the signals the callbacks
+    aborted. -/
+def asyncPhase (doc : Nat) (ps : List Pending) : State → List Nat →
+    State × List (Nat × Outcome) × List State × List Nat
+  | s, [] => (s, [], [], [])
+  | s, i :: is =>
+    let (s', o, g) := asyncStep doc s (ps[i]?.getD .invalid)
+    let (s'', os, hist, gs) := asyncPhase doc ps s' is
+    (s'', (o.map fun o => [(i, o)]).getD [] ++ os, s' :: hist, g.toList ++ gs)
+
+/-- Insert `x` at every position of a list. -/
+def insertEverywhere (x : Nat) : List Nat → List (List Nat)
+  | [] => [[x]]
+  | y :: ys => (x :: y :: ys) :: (insertEverywhere x ys).map (y :: ·)
+
+/-- Every order of a list. -/
+def orders : List Nat → List (List Nat)
+  | [] => [[]]
+  | x :: xs => (orders xs).flatMap (insertEverywhere x)
+
+/-- Every way to pick one element of each list. -/
+def choices {α : Type} : List (List α) → List (List α)
+  | [] => [[]]
+  | c :: cs => c.flatMap fun x => (choices cs).map (x :: ·)
+
+/-- What the `i`-th call of an `Op.concurrent` can settle with, given the script's states
+    `hist`, the states after the tool executions `ahist`, the executions' outcomes `ex`, and the
+    signals their callbacks aborted `gs`: each allowed outcome, with the `Tool` objects it
+    returns for a `getTools()`. -/
+def callChoices (doc : Nat) (hist ahist : List State) (ex : List (Nat × Outcome))
+    (gs : List Nat) (i : Nat) : Pending → List (Outcome × Option (List ToolObject))
+  | .settled o => [(o, none)]
+  | .readFailed e => [(.err e, some [])]
+  | .registered sig ab =>
+    if ab then [(.err .abort, none)]
+    -- A callback aborted the signal: before or after the task that resolves the promise.
+    else if (sig.map gs.contains).getD false then [(.ok, none), (.err .abort, none)]
+    else [(.ok, none)]
+  | .reading fo since =>
+    ((hist.drop since ++ ahist).map fun st =>
+      let r := getTools st fo doc
+      (r.2, some (r.1.toolObjects.getLastD [])))
+  | .executing .. => [((ex.lookup i).getD .invalidRequest, none)]
+  | .invalid => [(.invalidRequest, none)]
+
+/-- `Op.concurrent`: every allowed outcome, with the state it leaves. Each `getTools()` call's
+    `Tool` objects are added to `State.toolObjects` in the order of the actions, and a rejected
+    one adds none, as for `getTools`.
+    Spec: #dom-modelcontext-registertool
+    Spec: #dom-modelcontext-gettools
+    Spec: #dom-modelcontext-executetool -/
+def concurrent (s : State) (actions : List Action) (doc : Nat) : List (State × Outcome) :=
+  let (sEnd, ps, hist) := syncPhase doc s [] [] actions
+  if ps.any (fun p => match p with | .invalid => true | _ => false) then [(s, .invalidRequest)]
+  else
+    let waiting := (List.range ps.length).filter fun i =>
+      match ps[i]? with | some (.executing ..) => true | _ => false
+    (orders waiting).flatMap fun order =>
+      let (sA, ex, ahist, gs) := asyncPhase doc ps sEnd order
+      (choices ((List.range ps.length).map fun i =>
+          callChoices doc hist ahist ex gs i (ps[i]?.getD .invalid))).map fun picked =>
+        ({ sA with toolObjects := sA.toolObjects ++ picked.filterMap (·.2) },
+         .all (picked.map (·.1)))
+
+/-- One operation: every outcome the spec allows, each with the state it leaves. Every operation
+    but `Op.concurrent` has exactly one. -/
+def step (s : State) : Op → List (State × Outcome)
+  | .register t sig exp doc          => [registerTool s t sig exp doc]
+  | .registerAbortSync t sig exp doc => [registerAbortSync s t sig exp doc]
+  | .abort sig                       => [unregisterBySignal s sig]
+  | .getTools fo doc                 => [getTools s fo doc]
+  | .execute c i input doc           => [executeTool s c i input doc]
+  | .concurrent as doc               => concurrent s as doc
+
+/-- A sequence of operations, each awaited before the next: every allowed sequence of outcomes,
+    with the state it leaves. -/
+def run (s : State) : List Op → List (State × List Outcome)
+  | [] => [(s, [])]
   | op :: ops =>
-    let (s', o) := step s op
-    let (s'', os) := run s' ops
-    (s'', o :: os)
+    (step s op).flatMap fun (s', o) => (run s' ops).map fun (s'', os) => (s'', o :: os)
+
+/-- For each operation, the outcomes the spec allows for it, from any of the states `ss`. This
+    is what the oracle answers: it keeps the distinct states after each operation, not the whole
+    sequences of outcomes, so it doesn't say which outcomes of one operation go with which of a
+    later one. -/
+def explore (ss : List State) : List Op → List (List Outcome)
+  | [] => []
+  | op :: ops =>
+    let next := ss.flatMap (step · op)
+    (next.map (·.2)).eraseDups :: explore (next.map (·.1)).eraseDups ops
 
 end WebMCP
