@@ -1,7 +1,7 @@
 name: Docs
 
 # Builds browsable HTML docs for the model with doc-gen4 (docbuild/), uploads them as a workflow
-# artifact, and tries to publish them to GitHub Pages.
+# artifact, and publishes them to GitHub Pages.
 
 on:
   push:
@@ -38,7 +38,7 @@ jobs:
       - name: Build docs
         working-directory: docbuild
         run: lake build WebMCP:docs
-      # The artifact is the reliable output: download it from the run and open index.html.
+      # Also kept as a run artifact: download it and open index.html.
       - uses: actions/upload-artifact@v4
         with:
           name: docs
@@ -47,14 +47,9 @@ jobs:
         with:
           path: docbuild/.lake/build/doc
 
-  # Publishing to Pages needs Pages enabled for the repository (Settings > Pages > Source:
-  # GitHub Actions), which a private repository's plan may not allow. Until it is, this job
-  # fails on its own and continue-on-error keeps the run green; the docs artifact above is
-  # still there.
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    continue-on-error: true
     permissions:
       pages: write
       id-token: write
