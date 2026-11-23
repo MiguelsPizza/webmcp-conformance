@@ -58,8 +58,10 @@ return out;
 const raw = inventory(path.join(wptRoot, "webmcp"));
 
 // ---- op builders -------------------------------------------------------------------------
+// `doc` is an index into the model's frame tree (`harnessDocs` in WebMCP/Model.lean), left out
+// for the top-level document. How WPT's frames map onto it is in wpt/README.md (Method).
 function reg(name, o = {}) {
-  return {
+  const op = {
     op: "register", name,
     title: o.title ?? null,
     description: o.description === undefined ? "d" : o.description,
@@ -67,24 +69,42 @@ function reg(name, o = {}) {
     annotations: o.ann ?? null, behavior: o.behavior ?? "echo",
     signal: o.signal ?? null,
   };
+  if (o.exposedTo) op.exposedTo = o.exposedTo;
+  if (o.doc) op.doc = o.doc;
+  return op;
 }
 const regAbortSync = (name, signal, o = {}) => ({ ...reg(name, o), op: "registerAbortSync", signal });
 const abort = (signal) => ({ op: "abort", signal });
-const getTools = () => ({ op: "getTools" });
+const getTools = (o = {}) => ({ op: "getTools", ...(o.fromOrigins ? { fromOrigins: o.fromOrigins } : {}), ...(o.doc ? { doc: o.doc } : {}) });
 // `tool` is resolved to an index into the most recent getTools() result below.
-const exec = (tool, input = "omitted") => ({ op: "execute", call: "last", tool, input });
+const exec = (tool, input = "omitted", o = {}) => ({ op: "execute", call: o.call ?? "last", tool, input, ...(o.doc ? { doc: o.doc } : {}) });
+// Calls started from one script before any is awaited (Op.concurrent). An `aExec` names its tool
+// like `exec`, resolved against the getTools() calls before the operation; `aCancel(k)` aborts the
+// execution signal of action k.
+const conc = (actions, o = {}) => ({ op: "concurrent", actions, ...(o.doc ? { doc: o.doc } : {}) });
+const aExec = (tool, signal = "none", input = "omitted", call = "last") => ({ act: "execute", call, tool, input, signal });
+const aCancel = (target) => ({ act: "cancel", target });
 
 // ---- expectation builders (what the WPT assertion requires, in oracle outcome form) --------
 const is = (outcome) => ({ outcome });
 const names = (list) => ({ names: list });
 const count = (n) => ({ count: n });
 const field = (tool, f, extra) => ({ tool, field: f, ...extra });
+// helpers.js toolsAreEqual(): name, description, both schemas, origin, and the annotations' hints
+// (which must all be undefined, so annotations null, when `annotations` is not given).
+const like = (tool, expected) => ({ tool, like: expected });
+// assert_false(tools.some(t => t.name === name))
+const lacks = (name) => ({ lacks: name });
+// exec_response.success: the promise fulfilled, whatever the string.
+const resolves = () => ({ resolves: true });
 
 const cases = [];   // translated subtests
 const inScopeNames = new Set();
+// `file` is relative to webmcp/imperative/, or to webmcp/ when it starts with "/".
 function C(file, subtest, lines, body) {
-  inScopeNames.add(file + "\u0000" + subtest);
-  cases.push({ file: "webmcp/imperative/" + file, subtest, lines, scope: "in", ...body });
+  const rel = file.startsWith("/") ? file.slice(1) : "imperative/" + file;
+  inScopeNames.add(rel + "\u0000" + subtest);
+  cases.push({ file: "webmcp/" + rel, subtest, lines, scope: "in", ...body });
 }
 
 // ============================ getTools.https.html ==========================================
@@ -172,14 +192,14 @@ C("register_tool_signal.https.html", "register tool promise rejects with AbortEr
   checks: [{ at: 0, line: 21, assert: "registerTool(tool, {signal}); controller.abort(); promise rejects AbortError", want: is("err:AbortError") }],
 });
 C("register_tool_signal.https.html", "register tool promise rejects with error when signal gets aborted", [24, 30], {
-  trace: [], checks: [],
-  notExpressible: [{ line: 29, assert: "promise rejects with exactly the Error passed to controller.abort(error)",
-    why: "the model's signals abort only with the default reason (an AbortError DOMException); a custom abort reason is not in its value set" }],
+  trace: [regAbortSync("empty", 1, { description: "empty" })],
+  checks: [{ at: 0, line: 29, assert: "registerTool(tool, {signal}); controller.abort(error); promise rejects with exactly error", want: is("err:AbortError"),
+    proxy: "controller.abort(new Error('abort error')) -> an abort with the default reason (an AbortError DOMException); either way the abort steps reject the promise with the signal's abort reason (index.bs L893-L898). This is the previous subtest's trace: the custom reason is the only difference, and the model doesn't have it" }],
 });
 C("register_tool_signal.https.html", "register tool promise rejects when signal is already aborted", [32, 36], {
-  trace: [], checks: [],
-  notExpressible: [{ line: 35, assert: "promise rejects with exactly 'aborted' (AbortSignal.abort('aborted'))",
-    why: "custom abort reason, as above; the model would say err:AbortError for an already-aborted default-reason signal" }],
+  trace: [abort(2), reg("empty", { description: "empty", signal: 2 })],
+  checks: [{ at: 1, line: 35, assert: "registerTool(tool, {signal: AbortSignal.abort('aborted')}) rejects with exactly 'aborted'", want: is("err:AbortError"),
+    proxy: "AbortSignal.abort('aborted') -> a signal the trace aborts first, with the default reason; registerTool() rejects with the signal's abort reason (index.bs L866-L868)" }],
 });
 C("register_tool_signal.https.html", "aborting signal unregister tool", [38, 51], {
   setupNote: "the earlier subtests leave no tool registered (each registration is aborted)",
@@ -390,31 +410,399 @@ onerror.forEach(([name, lines, tname, desc, beh, regLine, rejLine, errLine, prox
   onerrorRegs.push(reg(tname, { description: desc, behavior: beh }));
 });
 
-// ============================ exposedTo-invalid-origins.https.html (last subtest) ==========
-C("exposedTo-invalid-origins.https.html", "Aborting a signal from a rejected registration must not unregister a later valid tool with the same name", [56, 95], {
-  setup: [reg("test_tool_0.25", { description: "Test tool", behavior: "returnText" }), reg("test_tool_0.75", { description: "Test tool", behavior: "returnText" })],
-  setupNote: "the two successful registrations of earlier subtests ('test_tool_' + Math.random(), exposedTo a valid origin); exposedTo is dropped, which does not change what this document's getTools() returns",
-  trace: [reg("target_tool", { description: "", behavior: "returnText", signal: 1 }),
-    reg("target_tool", { description: "Target tool", behavior: "returnText", signal: 2 }), getTools(), abort(1),
-    reg("target_tool", { description: "Target tool replacement", behavior: "returnText" }), exec("target_tool", "omitted")],
+// ---- frames and origins --------------------------------------------------------------------
+// WPT's documents map onto the model's frame tree (harnessDocs): the test page is document 0
+// (origin 0); a same-origin <iframe> is document 1; an HTTPS_REMOTE_ORIGIN <iframe> with
+// allow="tools ..." is document 3 (origin 1), and without it document 4; an
+// HTTPS_OTHER_NOTSAMESITE_ORIGIN frame is document 2 (origin 2), and that origin is origin 3 when
+// the test has no document of it. Signals are numbered by document: 0-2 for document 0, 3-5 for
+// 1, 6-8 for 2, 9-11 for 3. Each WPT subtest removes its iframes in cleanup, which takes their
+// tools with them, so a later subtest's setup only replays tools of the test page itself.
+const O = (n) => "origin:" + n;
+const iframeResult = "the iframe's tool returns 'hello from iframe' (resources/iframe-register-tool.html) -> model `returnText` ('hi')";
+const toolchange = (line, what) => ({ line, assert: what, why: "toolchange events are not modelled" });
+const stringResult = (s) => `the tool returns the string '${s}' -> model \`returnText\` ('hi'); the WPT assertion is that the result is the returned string itself, so 'hi'`;
+const customReason = (r) => `the execution signal is aborted with the reason ${r} -> the model's signal, which aborts with the default reason (an AbortError DOMException); either way executeTool()'s abort steps "Reject promise with signal's abort reason" (index.bs L1146-L1148 at 14b6d53)`;
+const afterStart = "WPT aborts after awaiting the callback's start; the model's `cancel` runs in the same script, before the queued tool execute steps. The abort steps reject the promise whenever they run, and cancelling doesn't stop a callback that has started, so the outcome is the same";
+const neverSettles = "execute returns a promise that never settles -> model `returnText`; the promise is rejected by the abort before the callback's outcome could matter";
+
+// ============================ exposedTo-cross-origin-child.https.html ========================
+C("exposedTo-cross-origin-child.https.html", "Parent exposes tool to cross-origin child", [28, 82], {
+  trace: [reg("parent_tool_exposed", { description: "Parent tool exposed to child", input: "object", behavior: "returnText", signal: 0, exposedTo: [O(1)] }),
+    getTools({ doc: 3, fromOrigins: [O(0)] }),
+    getTools({ doc: 3, fromOrigins: [O(0)] }), exec("parent_tool_exposed", "omitted", { doc: 3 }),
+    abort(0), getTools({ doc: 3, fromOrigins: [O(0)] })],
   checks: [
-    { at: 1, line: 69, assert: "await registerTool(target_tool, {signal: ac2}) fulfils", want: is("ok"), setup: true },
-    { at: 2, line: 77, assert: "[tool] = getTools() is target_tool", want: field("target_tool", "description", { equals: "Target tool" }), setup: true },
-    { at: 4, line: 89, assert: "after ac1.abort(), registering target_tool again rejects InvalidStateError", want: is("err:InvalidStateError") },
-    { at: 5, line: 94, assert: "executeTool(tool) resolves with 'callback2'", want: is("result:hi"),
-      proxy: "the tool returns the string 'callback2' -> model `returnText` ('hi')" }],
-  notExpressible: [{ line: 65, assert: "the first registration rejects SecurityError (exposedTo: ['http://insecure.example'])",
-    why: "exposedTo is out of the model's scope. The trace makes the first registration (with signal ac1) fail on the empty-description step instead, which also returns before the abort steps are added, so aborting ac1 must not touch target_tool either way" }],
+    { at: 0, line: 30, assert: "await registerTool(tool, {exposedTo: [REMOTE], signal}) fulfils", want: is("ok"), setup: true },
+    { at: 1, line: 44, assert: "the iframe's getTools({fromOrigins: [self.origin]}) returns the parent's tool, origin self.origin (toolsAreEqual)", want: like("parent_tool_exposed", { name: "parent_tool_exposed", description: "Parent tool exposed to child", inputSchema: { type: "object" }, outputSchema: null, origin: 0 }),
+      proxy: "inputSchema {type:'object', properties:{query:...}} -> model `object` ({type:'object'})" },
+    { at: 3, line: 61, assert: "the iframe's executeTool(tool) of the parent's tool fulfils", want: resolves() },
+    { at: 3, line: 62, assert: "the iframe gets 'hello'", want: is("result:hi"), proxy: stringResult("hello") },
+    { at: 5, line: 81, assert: "after controller.abort(), the iframe's getTools() returns []", want: count(0) }],
+  notes: "The iframe's 'execute' message runs getTools(options) and then executeTool(tool, {}); {} serializes like the omitted input.",
+  notExpressible: [toolchange(76, "the cross-origin iframe receives toolchange on unregistration")],
+});
+C("exposedTo-cross-origin-child.https.html", "Cross-origin child exposes tool to parent", [84, 127], {
+  trace: [reg("iframe_tool_exposed", { doc: 3, description: "Iframe tool exposed to parent", input: "object", behavior: "returnText", signal: 9, exposedTo: [O(0)] }),
+    getTools({ fromOrigins: [O(1)] }), exec("iframe_tool_exposed"), abort(9), getTools({ fromOrigins: [O(1)] })],
+  checks: [
+    { at: 0, line: 80, assert: "the iframe's await registerTool(tool, {exposedTo: [parent], signal}) fulfils (resources/iframe-register-tool.html)", want: is("ok"), setup: true },
+    { at: 1, line: 105, assert: "getTools({fromOrigins: [REMOTE]}) includes the iframe's tool, origin REMOTE (toolsAreEqual)", want: like("iframe_tool_exposed", { name: "iframe_tool_exposed", description: "Iframe tool exposed to parent", inputSchema: { type: "object" }, outputSchema: null, origin: 1 }),
+      proxy: "inputSchema {type:'object', properties:{query:...}} -> model `object`" },
+    { at: 2, line: 115, assert: "executeTool(tool) resolves with 'hello from iframe'", want: is("result:hi"), proxy: iframeResult },
+    { at: 4, line: 126, assert: "after the iframe unregisters, getTools({fromOrigins: [REMOTE]}) returns []", want: count(0) }],
+});
+C("exposedTo-cross-origin-child.https.html", "Parent exposes tool to origin that is neither its own nor its iframe's", [129, 159], {
+  trace: [reg("parent_tool", { description: "Parent tool exposed", behavior: "returnText", signal: 0, exposedTo: [O(3)] }),
+    getTools({ doc: 3, fromOrigins: [O(0)] }), abort(0)],
+  checks: [
+    { at: 0, line: 132, assert: "await registerTool(tool, {exposedTo: [OTHER], signal}) fulfils", want: is("ok"), setup: true },
+    { at: 1, line: 144, assert: "the iframe's getTools({fromOrigins: [self.origin]}) returns []", want: count(0) }],
+  notExpressible: [toolchange(158, "the iframe does not receive toolchange")],
+});
+C("exposedTo-cross-origin-child.https.html", "Iframe exposes tool to origin that is neither its own nor its parent's", [161, 194], {
+  trace: [reg("iframe_tool", { doc: 3, description: "Iframe tool", behavior: "returnText", signal: 9, exposedTo: [O(3)] }),
+    getTools({ fromOrigins: [O(1)] }), getTools({ fromOrigins: [O(1)] })],
+  checks: [
+    { at: 0, line: 80, assert: "the iframe's await registerTool(tool, {exposedTo: [OTHER]}) fulfils", want: is("ok"), setup: true },
+    { at: 1, line: 185, assert: "getTools({fromOrigins: [REMOTE]}) returns []", want: count(0) },
+    { at: 2, line: 193, assert: "after the 'unregister' message, getTools({fromOrigins: [REMOTE]}) still returns []", want: count(0) }],
+  notes: "L187 asks the iframe to unregister 'iframe_tool_to_c', a name it never registered, so the iframe aborts nothing and iframe_tool stays registered; the trace has no abort. The assertion holds either way.",
+  notExpressible: [toolchange(166, "the parent receives no toolchange event")],
 });
 
-// ============================ executeTool-abort.https.html (first subtest) =================
+// ============================ exposedTo-defaults-cross-origin.https.html =====================
+for (const [sub, lines, nm, desc, exp] of [
+  ["Parent tool with no exposedTo array is not visible to cross-origin iframe", [28, 56], "parent_tool_default", "Parent tool with default exposure", undefined],
+  ["Parent tool with empty exposedTo array is not visible to cross-origin iframe", [58, 85], "parent_tool_empty", "Parent tool with empty exposedTo", []]]) {
+  C("exposedTo-defaults-cross-origin.https.html", sub, lines, {
+    trace: [reg(nm, { description: desc, behavior: "returnText", signal: 0, exposedTo: exp }), getTools({ doc: 3 }), abort(0)],
+    checks: [
+      { at: 0, line: lines[0] + 2, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
+      { at: 1, line: lines[0] + 13 - (exp ? 1 : 0), assert: "the cross-origin iframe's getTools() returns []", want: count(0) }],
+    notExpressible: [toolchange(lines[1] - 1, "the cross-origin iframe receives no toolchange on unregistration")],
+  });
+}
+for (const [sub, lines, nm, desc, exp, l1, l2] of [
+  ["Cross-origin iframe tool with default exposure is not visible to parent", [87, 117], "iframe_tool_default", "Iframe tool with default exposure", undefined, 110, 116],
+  ["Cross-origin iframe tool with empty exposedTo array is not visible to parent", [119, 150], "iframe_tool_empty", "Iframe tool with empty exposedTo", [], 143, 149]]) {
+  C("exposedTo-defaults-cross-origin.https.html", sub, lines, {
+    trace: [reg(nm, { doc: 3, description: desc, behavior: "returnText", signal: 9, exposedTo: exp }), getTools(), abort(9), getTools()],
+    checks: [
+      { at: 0, line: 80, assert: "the iframe's await registerTool(...) fulfils (resources/iframe-register-tool.html)", want: is("ok"), setup: true },
+      { at: 1, line: l1, assert: "getTools() returns []", want: count(0) },
+      { at: 3, line: l2, assert: "after the iframe unregisters, getTools() has no " + nm, want: lacks(nm) }],
+    notExpressible: [toolchange(lines[0] + 5, "the parent receives no toolchange event")],
+  });
+}
+
+// ============================ exposedTo-defaults-same-origin.https.html ======================
+{
+  const ann = { readOnlyHint: true, untrustedContentHint: false, consequentialHint: false, debugging: false };
+  for (const [sub, lines, nm, desc, exp, a, L] of [
+    ["Parent tool with missing `exposedTo` array is visible to same-origin iframe", [23, 73], "parent_tool_default", "Parent tool with default exposure", undefined, ann, { reg: 25, seen: 40, eq: 41, ok: 53, res: 54, tc: 68, gone: 72 }],
+    ["Parent tool with empty `exposedTo` array is visible to same-origin iframe", [75, 122], "parent_tool_empty", "Parent tool with empty exposedTo", [], undefined, { reg: 77, seen: 90, eq: 91, ok: 102, res: 103, tc: 117, gone: 121 }]]) {
+    C("exposedTo-defaults-same-origin.https.html", sub, lines, {
+      trace: [reg(nm, { description: desc, input: "object", ann: a, behavior: "returnText", signal: 0, exposedTo: exp }),
+        getTools({ doc: 1 }), getTools({ doc: 1 }), exec(nm, "omitted", { doc: 1 }), abort(0), getTools({ doc: 1 })],
+      checks: [
+        { at: 0, line: L.reg, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
+        { at: 1, line: L.seen, assert: "the same-origin iframe's getTools() returns the parent's tool", want: field(nm, "name", { equals: nm }) },
+        { at: 1, line: L.eq, assert: "toolsAreEqual(tool, {...}), origin self.origin", want: like(nm, { name: nm, description: desc, inputSchema: { type: "object" }, outputSchema: null, ...(a ? { annotations: a } : {}), origin: 0 }),
+          proxy: "inputSchema {type:'object', properties:{query:...}} -> model `object`" },
+        { at: 3, line: L.ok, assert: "the iframe's executeTool(tool) fulfils", want: resolves() },
+        { at: 3, line: L.res, assert: "the iframe gets 'hello'", want: is("result:hi"), proxy: stringResult("hello") },
+        { at: 5, line: L.gone, assert: "after controller.abort(), the iframe's getTools() returns []", want: count(0) }],
+      notes: "The iframe's 'execute' message runs getTools() and then executeTool(tool, {}); {} serializes like the omitted input.",
+      notExpressible: [toolchange(L.tc, "the same-origin iframe receives toolchange on unregistration")],
+    });
+  }
+  for (const [sub, lines, nm, desc, exp, L] of [
+    ["Same-origin iframe tool with default exposure is visible to parent", [124, 162], "iframe_tool_default", "Iframe tool with default exposure", undefined, { eq: 141, res: 151, gone: 161 }],
+    ["Same-origin iframe tool with empty exposedTo array is visible to parent", [164, 203], "iframe_tool_empty", "Iframe tool with empty exposedTo", [], { eq: 182, res: 192, gone: 202 }]]) {
+    C("exposedTo-defaults-same-origin.https.html", sub, lines, {
+      trace: [reg(nm, { doc: 1, description: desc, behavior: "returnText", signal: 3, exposedTo: exp }), getTools(), exec(nm), abort(3), getTools()],
+      checks: [
+        { at: 0, line: 80, assert: "the iframe's await registerTool(...) fulfils (resources/iframe-register-tool.html)", want: is("ok"), setup: true },
+        { at: 1, line: L.eq, assert: "[tool] = getTools() is the iframe's tool, origin iframe.contentWindow.origin (toolsAreEqual)", want: like(nm, { name: nm, description: desc, inputSchema: null, outputSchema: null, origin: 0 }) },
+        { at: 2, line: L.res, assert: "executeTool(tool) resolves with 'hello from iframe'", want: is("result:hi"), proxy: iframeResult },
+        { at: 4, line: L.gone, assert: "after the iframe unregisters, getTools() has no " + nm, want: lacks(nm) }],
+    });
+  }
+}
+
+// ============================ exposedTo-invalid-origins.https.html ===========================
+{
+  const loop = [
+    ["/", "invalid", null], ["*", "invalid", null], ["https://example:bogus", "invalid", null],
+    ["https://\ud800.com", "invalid", "'https://\\ud800.com' -> `invalid`: USVString conversion turns the lone surrogate into U+FFFD, which the host parser rejects"],
+    ["http://example.com", "insecure", null],
+    ["ftp://example.com", "insecure", "'ftp://example.com' -> `insecure`: it parses, but an ftp: URL's origin is opaque, so not potentially trustworthy"],
+    ["about:blank", "insecure", "'about:blank' -> `insecure`: it parses, but its origin is opaque, so not potentially trustworthy"],
+    ["about:srcdoc", "insecure", "'about:srcdoc' -> `insecure`, as for about:blank"],
+    ["https://example.com", O(3), "'https://example.com' -> origin 3, a potentially trustworthy origin no document has"],
+    ["http://localhost:3000", O(3), "'http://localhost:3000' -> origin 3: localhost is potentially trustworthy, and no document has that origin"]];
+  const done = [];
+  loop.forEach(([o, arg, proxy], i) => {
+    const ok = arg.startsWith("origin:");
+    const r = reg(ok ? `test_tool_0.${i}` : "test_tool_x", { description: "Test tool", behavior: "returnText", exposedTo: [arg] });
+    C("exposedTo-invalid-origins.https.html", `registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like ${o} in exposedTo`, [26, 44], {
+      ...(done.length ? { setup: [...done], setupNote: "the successful registrations of earlier iterations (never unregistered)" } : {}),
+      trace: [r],
+      checks: [ok ? { at: 0, line: 39, assert: `await registerTool(tool, {exposedTo: [${JSON.stringify(o)}]}) fulfils`, want: is("ok"), ...(proxy ? { proxy } : {}) }
+        : { at: 0, line: 36, assert: `registerTool(tool, {exposedTo: [${JSON.stringify(o)}]}) rejects SecurityError`, want: is("err:SecurityError"), ...(proxy ? { proxy } : {}) }],
+      notes: "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name.",
+    });
+    if (ok) done.push(r);
+  });
+  C("exposedTo-invalid-origins.https.html", "registerTool() with abort signal reason because signal is processed before `exposedTo`", [47, 54], {
+    setup: [...done], setupNote: "the successful registrations of the loop (never unregistered)",
+    trace: [abort(0), reg("name", { description: "description", behavior: "returnUndefined", signal: 0, exposedTo: ["insecure"] })],
+    checks: [{ at: 1, line: 49, assert: "registerTool with AbortSignal.abort('aborted') and exposedTo ['about:blank#invalidOrigin'] rejects with the abort reason, not SecurityError", want: is("err:AbortError"),
+      proxy: "AbortSignal.abort('aborted') -> a signal the trace aborts first, whose reason is the default AbortError, so 'rejects with the abort reason' reads err:AbortError (SecurityError if exposedTo were checked first); 'about:blank#invalidOrigin' -> `insecure` (it parses; its origin is opaque)" }],
+  });
+  C("exposedTo-invalid-origins.https.html", "Aborting a signal from a rejected registration must not unregister a later valid tool with the same name", [56, 95], {
+    setup: [...done], setupNote: "the successful registrations of the loop (never unregistered)",
+    trace: [reg("target_tool", { description: "Target tool", behavior: "returnText", signal: 1, exposedTo: ["insecure"] }),
+      reg("target_tool", { description: "Target tool", behavior: "returnText", signal: 2 }), getTools(), abort(1),
+      reg("target_tool", { description: "Target tool replacement", behavior: "returnText" }), exec("target_tool", "omitted")],
+    checks: [
+      { at: 0, line: 65, assert: "registerTool(target_tool, {signal: ac1, exposedTo: ['http://insecure.example']}) rejects SecurityError", want: is("err:SecurityError") },
+      { at: 1, line: 69, assert: "await registerTool(target_tool, {signal: ac2}) fulfils", want: is("ok"), setup: true },
+      { at: 2, line: 77, assert: "[tool] = getTools() is target_tool", want: field("target_tool", "description", { equals: "Target tool" }), setup: true },
+      { at: 4, line: 89, assert: "after ac1.abort(), registering target_tool again rejects InvalidStateError", want: is("err:InvalidStateError") },
+      { at: 5, line: 94, assert: "executeTool(tool) resolves with 'callback2'", want: is("result:hi"),
+        proxy: "the tool returns the string 'callback2' -> model `returnText` ('hi')" }],
+  });
+}
+
+// ============================ exposedTo-multiple-children.https.html =========================
+C("exposedTo-multiple-children.https.html", "Multi-origin setup with mixed exposure lists", [15, 101], {
+  trace: [reg("tool_b_to_c", { doc: 3, description: "Tool B exposed to C", input: "object", behavior: "returnText", signal: 9, exposedTo: [O(2)] }),
+    getTools(), getTools({ doc: 2, fromOrigins: [O(1)] }), abort(9), getTools({ doc: 2, fromOrigins: [O(1)] })],
+  checks: [
+    { at: 0, line: 80, assert: "frame B's await registerTool(tool, {exposedTo: [C]}) fulfils (resources/iframe-register-tool.html)", want: is("ok"), setup: true },
+    { at: 1, line: 62, assert: "the parent's getTools() returns []", want: count(0) },
+    { at: 2, line: 69, assert: "frame C's getTools({fromOrigins: [B]}) returns B's tool, origin B (toolsAreEqual)", want: like("tool_b_to_c", { name: "tool_b_to_c", description: "Tool B exposed to C", inputSchema: { type: "object" }, outputSchema: null, origin: 1 }),
+      proxy: "frame C (a child of the test page) -> document 2, which is nested in the same-origin document 1; getTools() walks every navigable of the tree, so where C sits doesn't change what it sees. inputSchema {type:'object', properties:...} -> model `object`" },
+    { at: 4, line: 100, assert: "after B unregisters, frame C's getTools({fromOrigins: [B]}) returns []", want: count(0) }],
+  notExpressible: [toolchange(58, "frame C receives toolchange on registration"), toolchange(94, "the parent receives no toolchange on unregistration"), toolchange(95, "frame C receives toolchange on unregistration")],
+});
+
+// ============================ getTools-filtering.https.html ==================================
+C("getTools-filtering.https.html", "getTools() correctly filters returned tools by fromOrigins origins while preserving same-origin tools", [28, 96], {
+  trace: [reg("parent_tool", { description: "Parent tool", behavior: "returnText", signal: 0 }),
+    reg("iframe_tool_b", { doc: 3, description: "Tool from B exposed to parent", behavior: "returnText", signal: 9, exposedTo: [O(0)] }),
+    reg("iframe_tool_c", { doc: 2, description: "Tool from C exposed to parent", behavior: "returnText", signal: 6, exposedTo: [O(0)] }),
+    getTools(), getTools(), getTools({ fromOrigins: [O(1)] }), getTools({ fromOrigins: [O(1), O(2)] }), abort(0)],
+  checks: [
+    { at: 0, line: 31, assert: "await registerTool(parent_tool, {signal}) fulfils", want: is("ok"), setup: true },
+    { at: 1, line: 80, assert: "iframe B's await registerTool(tool, {exposedTo: [self.origin]}) fulfils", want: is("ok"), setup: true },
+    { at: 2, line: 80, assert: "iframe C's await registerTool(tool, {exposedTo: [self.origin]}) fulfils", want: is("ok"), setup: true,
+      proxy: "iframe C (a child of the test page) -> document 2, nested in the same-origin document 1; getTools() walks the whole tree" },
+    { at: 3, line: 73, assert: "getTools() returns only parent_tool", want: names(["parent_tool"]) },
+    { at: 4, line: 78, assert: "getTools({}) returns only parent_tool", want: names(["parent_tool"]), proxy: "getTools({}) -> getTools() with no fromOrigins; an omitted fromOrigins is the same empty list" },
+    { at: 5, line: 83, assert: "getTools({fromOrigins: [B]}) returns iframe_tool_b, parent_tool", want: names(["iframe_tool_b", "parent_tool"]) },
+    { at: 6, line: 89, assert: "getTools({fromOrigins: [B, C]}) returns iframe_tool_b, iframe_tool_c, parent_tool", want: names(["iframe_tool_b", "iframe_tool_c", "parent_tool"]) }],
+});
+C("getTools-filtering.https.html", "getTools() rejects with SecurityError if an insecure origin is supplied in fromOrigins", [98, 100], {
+  trace: [getTools({ fromOrigins: ["insecure"] })],
+  checks: [{ at: 0, line: 99, assert: "getTools({fromOrigins: ['http://insecure.com']}) rejects SecurityError", want: is("err:SecurityError") }],
+});
+
+// ============================ permissions-policy.https.html ==================================
+const sameOriginNone = "a same-origin <iframe allow=\"tools 'none'\"> -> document 4, a cross-origin <iframe> without allow=\"tools\". The model has no same-origin document that is not allowed to use \"tools\"; the check that rejects is only whether the document is allowed, not its origin";
+C("permissions-policy.https.html", "getTools() throws NotAllowedError in iframe when permissions policy is disabled", [61, 85], {
+  trace: [getTools({ doc: 4 })],
+  checks: [{ at: 0, line: 84, assert: "the cross-origin iframe's (no allow) getTools() rejects NotAllowedError", want: is("err:NotAllowedError") }],
+});
+C("permissions-policy.https.html", "executeTool() throws NotAllowedError in iframe when permissions policy is disabled", [87, 118], {
+  trace: [reg("parent_tool", { description: "Parent tool", behavior: "returnText", signal: 0 }), getTools(), exec("parent_tool", "omitted", { doc: 4 }), abort(0)],
+  checks: [
+    { at: 0, line: 93, assert: "await registerTool(parent_tool, {signal}) fulfils", want: is("ok"), setup: true },
+    { at: 1, line: 101, assert: "parent_tool is discovered", want: field("parent_tool", "name", { equals: "parent_tool" }), setup: true },
+    { at: 2, line: 113, assert: "the iframe's executeTool(tool) rejects NotAllowedError", want: is("err:NotAllowedError"), proxy: sameOriginNone }],
+});
+C("permissions-policy.https.html", "registerTool() throws NotAllowedError in iframe when permissions policy is disabled", [120, 140], {
+  trace: [reg("child_tool", { doc: 4, description: "Child tool", behavior: "returnText" })],
+  checks: [{ at: 0, line: 131, assert: "the iframe's registerTool() rejects NotAllowedError", want: is("err:NotAllowedError"), proxy: sameOriginNone }],
+});
+C("permissions-policy.https.html", "getTools() throws NotAllowedError in same-origin iframe when permissions policy is disabled", [142, 158], {
+  trace: [getTools({ doc: 4 })],
+  checks: [{ at: 0, line: 153, assert: "the iframe's getTools() rejects NotAllowedError", want: is("err:NotAllowedError"), proxy: sameOriginNone }],
+});
+C("permissions-policy.https.html", "executeTool() rejects when target frame revokes exposedTo permission after getTools()", [197, 251], {
+  trace: [reg("revocable_tool", { doc: 3, description: "Origin B revocable tool", behavior: "returnText", signal: 9, exposedTo: [O(0)] }),
+    getTools({ fromOrigins: [O(1)] }), abort(9),
+    reg("revocable_tool", { doc: 3, description: "Origin B private tool", behavior: "returnText", signal: 10, exposedTo: [] }),
+    getTools({ doc: 3 }), exec("revocable_tool", "omitted", { call: 0 })],
+  checks: [
+    { at: 0, line: 80, assert: "the iframe's await registerTool(tool, {exposedTo: [self.origin]}) fulfils", want: is("ok"), setup: true },
+    { at: 1, line: 222, assert: "getTools({fromOrigins: [B]}) finds revocable_tool", want: field("revocable_tool", "name", { equals: "revocable_tool" }) },
+    { at: 3, line: 80, assert: "the iframe's re-registration with exposedTo [] fulfils", want: is("ok"), setup: true },
+    { at: 4, line: 243, assert: "the iframe's getTools() returns one tool, revocable_tool", want: names(["revocable_tool"]) },
+    { at: 5, line: 248, assert: "executeTool(the earlier Tool) rejects NotFoundError", want: is("err:NotFoundError") }],
+  notes: "The earlier Tool's tool id was unregistered, so the spec rejects it as 'tool not found' before the exposure check (which would also reject, with NotFoundError, for the new tool).",
+});
+
+// ============================ executeTool-abort.https.html ===================================
 C("executeTool-abort.https.html", "executeTool() provides a non-aborted default AbortSignal when called without options", [12, 31], {
   trace: [reg("default_signal_tool", { description: "Test default signal", behavior: "returnText", signal: 0 }), getTools(), exec("default_signal_tool", "omitted"), abort(0)],
   checks: [
     { at: 0, line: 17, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
     { at: 2, line: 28, assert: "executeTool(tool) resolves with 'success'", want: is("result:hi"),
       proxy: "the tool returns the string 'success' -> model `returnText` ('hi')" }],
-  notExpressible: [{ line: "29-30", assert: "options.signal is a non-aborted AbortSignal", why: "the execution signal is out of the model's scope" }],
+  notExpressible: [{ line: "29-30", assert: "options.signal is a non-aborted AbortSignal", why: "the callback's own options.signal is not modelled" }],
+});
+C("executeTool-abort.https.html", "caller abort propagates to tool callback options.signal", [33, 122], {
+  trace: [reg("abort_propagate_tool", { description: "Test abort propagation", behavior: "returnText", signal: 0 }), getTools(),
+    conc([aExec("abort_propagate_tool", "live"), aCancel(0)]), abort(0)],
+  checks: [
+    { at: 0, line: 57, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
+    { at: 2, action: 0, line: 119, assert: "the execution rejects with 'custom cancellation reason'", want: is("err:AbortError"),
+      proxy: customReason("'custom cancellation reason'") + ". " + afterStart + ". " + neverSettles },
+    { at: 2, action: 1, line: 100, assert: "controller.abort() (the cancel itself)", want: is("ok"), setup: true }],
+  notExpressible: [
+    { line: "93-98, 110-117", assert: "one toolactivated and one toolcancel event at document.modelContext", why: "events are not modelled" },
+    { line: 109, assert: "order of tool start, toolactivated, rejection, signal abort, toolcancel", why: "events and the callback's own signal are not modelled" },
+    { line: "120-121", assert: "the callback's options.signal aborts with an AbortError", why: "the callback's own options.signal is not modelled" }],
+});
+C("executeTool-abort.https.html", "executeTool() with already-aborted tool synchronously rejects", [124, 145], {
+  trace: [reg("already_aborted_tool", { description: "Test already aborted signal", behavior: "returnText", signal: 0 }), getTools(),
+    conc([aExec("already_aborted_tool", "aborted")]), abort(0)],
+  checks: [
+    { at: 0, line: 128, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
+    { at: 2, action: 0, line: 144, assert: "executeTool(tool, {}, {signal: AbortSignal.abort('already aborted')}) rejects with 'already aborted'", want: is("err:AbortError"),
+      proxy: "AbortSignal.abort('already aborted') -> an `aborted` execution signal, whose reason is the default AbortError; executeTool() returns a promise rejected with the signal's abort reason (index.bs L1140-L1141). The tool (t.unreached_func) -> `returnText`; it never runs either way" }],
+  notExpressible: [{ line: 143, assert: "the rejection is already observable after one microtask", why: "the oracle reports outcomes, not timing. The model rejects in executeTool()'s method steps (`syncAction`), which is what the timing checks" }],
+});
+C("executeTool-abort.https.html", "executeTool() promise remains rejected even if tool callback resolves after abort", [147, 180], {
+  trace: [reg("async_resolve_after_abort_tool", { description: "Test resolving promise after abort", behavior: "returnText", signal: 0 }), getTools(),
+    conc([aExec("async_resolve_after_abort_tool", "live"), aCancel(0)]), abort(0)],
+  checks: [
+    { at: 0, line: 153, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
+    { at: 2, action: 0, line: 172, assert: "executeTool() then controller.abort() in the same script: rejects AbortError even if the tool resolves", want: is("err:AbortError"),
+      proxy: "the tool resolves 'late resolved value' once its options.signal aborts -> model `returnText`, which resolves; the cancelled call rejects whatever the callback does" }],
+  notExpressible: [{ line: "178-179", assert: "the callback's own promise resolves 'late resolved value'", why: "the callback's own options.signal is not modelled" }],
+});
+C("executeTool-abort.https.html", "concurrent executions of the same tool have independent AbortSignals", [182, 233], {
+  trace: [reg("concurrent_tool", { description: "Test concurrent executions", behavior: "returnText", signal: 0 }), getTools(),
+    conc([aExec("concurrent_tool", "live"), aExec("concurrent_tool", "live"), aCancel(0)]), abort(0)],
+  checks: [
+    { at: 0, line: 193, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
+    { at: 2, action: 0, line: 225, assert: "c1.abort('cancel 1'): execPromise1 rejects with 'cancel 1'", want: is("err:AbortError"),
+      proxy: customReason("'cancel 1'") + ". " + afterStart },
+    { at: 2, action: 1, line: 232, assert: "execPromise2 resolves with 'exec2 result'", want: is("result:hi"),
+      proxy: "the first execution never settles and the second resolves 'exec2 result' -> model `returnText` for both ('hi'); the first is cancelled, so only the second's result is seen; the WPT assertion is that the result is the returned string itself, so 'hi'" }],
+  notExpressible: [{ line: "228-229", assert: "execution 1's options.signal is aborted and execution 2's is not", why: "the callback's own options.signal is not modelled" }],
+});
+
+// ============================ executeTool-signal-cross-origin.https.html =====================
+for (const [sub, lines, nm, desc, l, reason, extraProxy, ne] of [
+  ["caller abort in parent document propagates to options.signal in cross-origin iframe tool", [15, 73], "cross_origin_iframe_tool", "Cross origin tool in iframe", 68, "'parent cross-origin abort reason'", "",
+    [{ line: "70-72", assert: "the iframe tool's options.signal aborts with an AbortError, and toolcancel fires in the iframe", why: "the callback's own options.signal and events are not modelled" }]],
+  ["other frame aborting an AbortController passed to executeTool() cancels target execution and fires toolcancel", [128, 194], "third_frame_cancel_tool", "Cross origin tool cancelled by third frame signal", 190, "'aborted from third frame'",
+    ". The AbortController comes from a third (same-origin) iframe's realm and the test page aborts it -> a signal of the caller's; the model has no realms, and executeTool()'s abort steps don't depend on the signal's realm",
+    [{ line: "192-193", assert: "the iframe tool's options.signal aborts with an AbortError, and toolcancel fires in the iframe", why: "the callback's own options.signal and events are not modelled" }]]]) {
+  C("executeTool-signal-cross-origin.https.html", sub, lines, {
+    trace: [reg(nm, { doc: 3, description: desc, behavior: "returnText", signal: 9, exposedTo: [O(0)] }), getTools({ fromOrigins: [O(1)] }),
+      conc([aExec(nm, "live"), aCancel(0)])],
+    checks: [
+      { at: 0, line: 80, assert: "the iframe's await registerTool(tool, {exposedTo: [self.origin]}) fulfils (resources/iframe-register-tool.html)", want: is("ok"), setup: true },
+      { at: 1, line: l === 68 ? 44 : 163, assert: "getTools({fromOrigins: [REMOTE]}) finds the tool", want: field(nm, "name", { equals: nm }), setup: true },
+      { at: 2, action: 0, line: l, assert: `executeTool(tool, {}, {signal}) rejects with ${reason} after controller.abort()`, want: is("err:AbortError"),
+        proxy: customReason(reason) + ". " + afterStart + ". The iframe tool hangs forever (hangsForeverAndReportsAbort) -> model `returnText`" + extraProxy }],
+    notExpressible: ne,
+  });
+}
+
+// ============================ unregister-during-executeTool.https.html =======================
+const selfUnreg = (who) => `${who} unregisters the tool while its callback is pending -> model \`unregisterSelf\`, whose callback aborts its own registration signal and then resolves with its input. Either way the unregistration comes after "invoke the execute callback" has started, which the spec's note says doesn't cancel the execution`;
+C("unregister-during-executeTool.https.html", "Pending executeTool() Promise resolves successfully when the target cross-origin tool is unregistered mid-execution", [25, 97], {
+  trace: [reg("endless_tool", { doc: 3, description: "Endless tool in iframe", behavior: "unregisterSelf", signal: 9, exposedTo: [O(0)] }),
+    getTools({ fromOrigins: [O(1)] }), exec("endless_tool"), getTools({ fromOrigins: [O(1)] })],
+  checks: [
+    { at: 0, line: 80, assert: "the iframe's await registerTool(tool, {exposedTo: [self.origin]}) fulfils", want: is("ok"), setup: true },
+    { at: 1, line: 63, assert: "the tool is visible to the parent", want: field("endless_tool", "name", { equals: "endless_tool" }), setup: true },
+    { at: 2, line: 96, assert: "the pending execution resolves with the tool's result", want: is("result:{}"),
+      proxy: selfUnreg("The iframe's message handler") + ". The tool resolves 'delayed_result'; `unregisterSelf` resolves with the omitted input, so the result reads '{}'. This hides the #361 half of L96: WPT also expects the string 'delayed_result' back without JSON encoding" },
+    { at: 3, line: 90, assert: "getTools({fromOrigins: [REMOTE]}) no longer returns the tool", want: count(0),
+      proxy: "WPT calls getTools() after the unregistration and before the execution settles; the trace calls it after, when the tool map is the same" }],
+  notExpressible: [{ line: 74, assert: "the tool's options.signal is not aborted by the unregistration", why: "the callback's own options.signal is not modelled" }],
+});
+C("unregister-during-executeTool.https.html", "Pending executeTool() Promise resolves successfully when target same-document tool is unregistered mid-execution", [99, 134], {
+  trace: [reg("same_doc_unregister_tool", { description: "Test unregister during exec in same doc", behavior: "unregisterSelf", signal: 0 }), getTools(), exec("same_doc_unregister_tool"), getTools()],
+  checks: [
+    { at: 0, line: 106, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
+    { at: 2, line: 133, assert: "the pending execution resolves with the tool's result", want: is("result:{}"),
+      proxy: selfUnreg("The test's regController.abort()") + ". The tool returns 'same_doc_result'; `unregisterSelf` resolves with the omitted input, so the result reads '{}'. This hides the #361 half of L133" },
+    { at: 3, line: 128, assert: "getTools() no longer returns the tool", want: count(0),
+      proxy: "WPT calls getTools() before the execution settles; the trace calls it after, when the tool map is the same" }],
+  notExpressible: [{ line: 110, assert: "the tool's options.signal is not aborted by the unregistration", why: "the callback's own options.signal is not modelled" }],
+});
+C("unregister-during-executeTool.https.html", "executeTool() cancellation propagates to options.signal even when tool synchronously unregistered itself inside execute()", [136, 165], {
+  trace: [reg("sync_unregister_then_abort_tool", { description: "Synchronously unregisters itself during execute(), then gets cancelled", behavior: "unregisterSelf", signal: 0 }), getTools(),
+    conc([aExec("sync_unregister_then_abort_tool", "live"), aCancel(0)]), getTools()],
+  checks: [
+    { at: 0, line: 143, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
+    { at: 2, action: 0, line: 163, assert: "execController.abort('caller_cancelled') after the tool unregistered itself: rejects with 'caller_cancelled'", want: is("err:AbortError"),
+      proxy: customReason("'caller_cancelled'") + ". " + afterStart + ". The tool aborts regController and returns a promise that never settles -> `unregisterSelf`, which aborts its registration signal and then resolves; the cancelled call rejects either way" }],
+  notExpressible: [{ line: 164, assert: "the callback's options.signal aborts", why: "the callback's own options.signal is not modelled" }],
+});
+
+// ============================ executeTool-unregister-resolution-race.https.html ==============
+C("executeTool-unregister-resolution-race.https.html", "executeTool resolves successfully even when tool is unregistered synchronously after its promise resolves", [11, 37], {
+  trace: [reg("racy_tool", { description: "a racy tool", behavior: "unregisterSelf", signal: 0 }), getTools(), exec("racy_tool"), getTools()],
+  checks: [
+    { at: 0, line: 14, assert: "await registerTool(..., {signal}) fulfils", want: is("ok"), setup: true },
+    { at: 2, line: 36, assert: "executeTool(tool) resolves with the JSON of the returned object", want: is("result:{}"),
+      proxy: "the callback resolves {status:'resolved'} and then aborts its own registration signal -> `unregisterSelf`, which aborts first and then resolves with the received {}; both happen inside the callback, after \"invoke the execute callback\" started. WPT's '{\"status\":\"resolved\"}' becomes '{}' (JSON either way)" }],
+  notes: "The trailing getTools() shows the tool did unregister itself (it is not a WPT assertion).",
+});
+
+// ============================ executeTool-events.https.html ==================================
+C("executeTool-events.https.html", "toolactivated and toolcancel events are dispatched on document.modelContext during tool execution and cancellation", [9, 74], {
+  trace: [reg("slow", { description: "slow tool", behavior: "returnText", signal: 0 }), getTools(), conc([aExec("slow", "live"), aCancel(0)]), abort(0)],
+  checks: [
+    { at: 0, line: 29, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
+    { at: 2, action: 0, line: 54, assert: "controller.abort(): executeTool() rejects AbortError", want: is("err:AbortError"), proxy: afterStart + ". " + neverSettles }],
+  notExpressible: [{ line: "41-52, 59-72", assert: "toolactivated and toolcancel events and their members", why: "events are not modelled" }],
+});
+C("executeTool-events.https.html", "toolactivated is dispatched at the ModelContext of the tool target document", [76, 108], {
+  trace: [reg("iframe_tool", { doc: 1, description: "Tool registered in a same-origin child document", behavior: "returnText" }), getTools(), exec("iframe_tool")],
+  checks: [
+    { at: 0, line: 84, assert: "await iframeModelContext.registerTool(...) fulfils", want: is("ok"), setup: true },
+    { at: 1, line: 100, assert: "iframe_tool is visible to the parent document", want: field("iframe_tool", "name", { equals: "iframe_tool" }) },
+    { at: 2, line: 102, assert: "executeTool(tool, {}) resolves with 'iframe result'", want: is("result:hi"),
+      proxy: "the tool returns the string 'iframe result' -> model `returnText` ('hi'); the WPT assertion is that the result is the returned string itself. {} serializes like the omitted input" }],
+  notExpressible: [{ line: "104-107", assert: "toolactivated fires at the target document's ModelContext, not the caller's", why: "events are not modelled" }],
+});
+C("executeTool-events.https.html", "toolcancel is dispatched at the ModelContext of the tool target document", [110, 152], {
+  trace: [reg("iframe_slow_tool", { doc: 1, description: "Slow tool registered in a same-origin child document", behavior: "returnText" }), getTools(),
+    conc([aExec("iframe_slow_tool", "live"), aCancel(0)])],
+  checks: [
+    { at: 0, line: 118, assert: "await iframeModelContext.registerTool(...) fulfils", want: is("ok"), setup: true },
+    { at: 1, line: 139, assert: "iframe_slow_tool is visible to the parent document", want: field("iframe_slow_tool", "name", { equals: "iframe_slow_tool" }) },
+    { at: 2, action: 0, line: 143, assert: "executeTool(tool, {}, {signal}) then controller.abort(): rejects AbortError", want: is("err:AbortError"), proxy: neverSettles }],
+  notExpressible: [{ line: "148-151", assert: "toolcancel fires at the target document's ModelContext, not the caller's", why: "events are not modelled" }],
+});
+
+// ============================ tool-cancel-event.https.html ===================================
+C("/tool-cancel-event.https.html", "ontoolcancel is invoked when a tool invocation is canceled", [49, 104], {
+  trace: [reg("onevent_tool", { description: "Tool used to trigger ontoolcancel", behavior: "returnText", signal: 0 }), getTools(),
+    conc([aExec("onevent_tool", "live"), aCancel(0)]), conc([aExec("onevent_tool", "live"), aCancel(0)]), abort(0)],
+  checks: [
+    { at: 0, line: 62, assert: "await registerTool(...) fulfils", want: is("ok"), setup: true },
+    { at: 2, action: 0, line: 84, assert: "first executeTool() then controller.abort(): rejects AbortError", want: is("err:AbortError"), proxy: neverSettles },
+    { at: 3, action: 0, line: 84, assert: "second executeTool() then controller.abort(): rejects AbortError", want: is("err:AbortError"), proxy: neverSettles }],
+  notExpressible: [{ line: "50, 57, 92-94, 97, 102", assert: "ontoolcancel reflects the handler and is invoked exactly once", why: "events are not modelled" }],
+});
+
+// ============================ same-origin-iframe-registerTool-regression.https.html ==========
+C("same-origin-iframe-registerTool-regression.https.html", "registerTool() does not reject in connected same-origin iframe navigated away of about:blank", [10, 26], {
+  trace: [reg("connected_tool", { doc: 1, description: "Tool registered in connected frame", behavior: "returnText" })],
+  checks: [{ at: 0, line: 21, assert: "the same-origin iframe's await registerTool(...) fulfils", want: is("ok"),
+    proxy: "the iframe's document, loaded after its initial about:blank -> document 1. The model has no navigation; the call is made in the loaded document, which is what the assertion needs" }],
 });
 
 // ---- out-of-scope inventory -------------------------------------------------------------------
@@ -427,36 +815,28 @@ const fileReason = {
   "imperative/detached-frame-modelContext.https.html": "detached document (fully-active checks)",
   "imperative/detached-frame-registerTool.https.html": "detached document (fully-active checks)",
   "imperative/detached-frame-waitForToolsUntil.https.html": "non-modelled API waitForToolsUntil() (not in the spec IDL at 14b6d53), detached document",
-  "imperative/executeTool-abort.https.html": "execution signal / cancellation, toolactivated/toolcancel events",
-  "imperative/executeTool-across-trees.https.html": "multiple frame trees (window.open)",
+  "imperative/executeTool-abort.https.html": "a callback that aborts its caller's execution signal (the model's callbacks only settle or unregister their own tool), the callback's own options.signal, toolcancel",
+  "imperative/executeTool-across-trees.https.html": "multiple frame trees (window.open): a document in another traversable",
   "imperative/executeTool-caller-navigate-abort.https.html": "navigation/detach of the caller, execution signal, toolcancel",
   "imperative/executeTool-detach-toolactivated.https.html": "events, detach during execution, iframes",
   "imperative/executeTool-detach-toolcancel.https.html": "events, detach during cancellation, iframes",
-  "imperative/executeTool-events.https.html": "events (toolactivated/toolcancel), execution signal, iframes",
-  "imperative/executeTool-reentrant-cancellation.https.html": "execution signal / cancellation, re-entrant execution, iframe detach",
-  "imperative/executeTool-signal-cross-origin.https.html": "execution signal, cross-origin iframes",
+    "imperative/executeTool-reentrant-cancellation.https.html": "execution signal / cancellation, re-entrant execution, iframe detach",
+  "imperative/executeTool-signal-cross-origin.https.html": "asserts only on the callback's own options.signal and toolcancel, which are not modelled",
   "imperative/executeTool-target-detachment.https.html": "detach of the target frame, execution signal",
   "imperative/executeTool-target-navigation.https.html": "navigation of the target document, iframes",
-  "imperative/executeTool-unregister-resolution-race.https.html": "unregistration from inside a running callback (interleaving the model does not express)",
-  "imperative/exposedTo-cross-origin-child.https.html": "cross-origin iframes, exposedTo, toolchange events",
-  "imperative/exposedTo-defaults-cross-origin.https.html": "cross-origin iframes, exposedTo defaults",
-  "imperative/exposedTo-defaults-same-origin.https.html": "iframes (multi-document), exposedTo defaults",
-  "imperative/exposedTo-invalid-origins.https.html": "exposedTo origin validation (SecurityError)",
-  "imperative/exposedTo-multiple-children.https.html": "cross-origin iframes, exposedTo",
-  "imperative/exposedTo-window-open.https.html": "multiple frame trees (window.open), exposedTo",
-  "imperative/getTools-filtering.https.html": "cross-origin iframes, getTools({fromOrigins}) filtering and validation",
-  "imperative/initial-about-blank-replacement-register-tool.https.html": "navigation / document replacement, iframes",
+    "imperative/exposedTo-cross-origin-child.https.html": "asserts only on toolchange events",
+          "imperative/exposedTo-window-open.https.html": "multiple frame trees (window.open): a document in another traversable",
+    "imperative/initial-about-blank-replacement-register-tool.https.html": "navigation / document replacement, iframes",
   "imperative/initial-about-blank-replacement-removes-tools.https.html": "navigation / document replacement, iframes",
   "imperative/initial-about-blank-shared-tool.https.html": "navigation / document replacement, iframes",
   "imperative/javascript-url-document-replacement.https.html": "navigation / document replacement, iframes",
   "imperative/model_context.https.html": "document without a browsing context (fully-active checks), iframes",
   "imperative/non-secure.html": "secure-context exposure ([SecureContext])",
   "imperative/opaque-origin-tools.https.html": "opaque origins, sandboxed iframes, popups",
-  "imperative/permissions-policy.https.html": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes",
+  "imperative/permissions-policy.https.html": "navigation of an iframe to an origin its allow attribute does not cover",
   "imperative/register-tool-input-schema-registers-same-name.https.html": "page script run by toJSON() during registerTool() (the model's toJSON runs no script, so it omits the second duplicate-name check)",
   "imperative/register_tool_toolchange.https.html": "events (toolchange ordering)",
-  "imperative/same-origin-iframe-registerTool-regression.https.html": "iframes",
-  "imperative/unregister-during-executeTool.https.html": "unregistration while an execution is pending (interleaving), execution signal, iframes",
+    "imperative/unregister-during-executeTool.https.html": "re-entrant executeTool() from inside a callback (the model's callbacks only settle or unregister their own tool)",
   "imperative/wait-for-tools-until.https.html": "non-modelled API waitForToolsUntil() (not in the spec IDL at 14b6d53)",
 };
 const subReason = {
@@ -486,6 +866,7 @@ function unquote(src) {
     : JSON.parse('"' + t.slice(1, -1).replace(/\\'/g, "'").replace(/(^|[^\\])"/g, '$1\\"') + '"')).join("");
 }
 const out = [];
+const matched = new Set();
 const crash = new Set(["imperative/abort-signal-after-iframe-removal-crash.https.html", "imperative/cancel-reentrancy-crash.https.html",
   "imperative/register-tool-input-schema-removes-iframe-crash.https.html", "imperative/executeTool-same-document-navigation-crash.https.html",
   "imperative/wait-for-tools-until-detach-crash.https.html"]);
@@ -498,7 +879,7 @@ for (const f of raw) {
     const key = f.file + ":" + s.line;
     const nameList = expand[key] || [unquote(s.name)];
     for (const name of nameList) {
-      if (handled.has(f.file) && inScopeNames.has(f.file.replace(/^imperative\//, "") + "\u0000" + name)) continue;
+      if (handled.has(f.file) && inScopeNames.has(f.file + "\u0000" + name)) { matched.add(f.file + "\u0000" + name); continue; }
       if (f.file === "imperative/register_tool_invalid_json_schema.https.html") continue; // all translated above
       if (f.file === "imperative/executeTool-error-window-onerror.https.html") continue;   // all translated above
       const reason = subReason[f.file + "\u0000" + s.name] || fileReason[f.file] || (f.file.startsWith("declarative/") ? "declarative API (form-based tools), which the spec text at 14b6d53 does not define" : null);
@@ -508,22 +889,54 @@ for (const f of raw) {
   }
 }
 
+for (const k of inScopeNames)
+  if (!matched.has(k) && !/register_tool_invalid_json_schema|executeTool-error-window-onerror/.test(k))
+    throw new Error("translated subtest not in the inventory: " + k.replace("\u0000", " / "));
+
 // ---- resolve execute ops against the oracle's own getTools() results -------------------------
 function runOracle(ops) {
+  if (!ops.length) return [];
   return JSON.parse(execFileSync(oracle, { input: JSON.stringify(ops) + "\n" }).toString().trim().split("\n")[0]);
 }
-function resolve(setup, trace) {
-  const all = [...setup, ...trace].map((o) => o.op === "execute" ? { ...o, call: typeof o.call === "number" ? o.call : 0, index: 0 } : o);
-  const res = runOracle(all.map(({ tool, ...o }) => o));
-  let calls = -1; const lists = [];
-  const outOps = [...setup, ...trace].map((o, i) => {
-    if (o.op === "getTools") { calls++; lists.push(res[i].slice(6).split(";").filter(Boolean).map((t) => t.split("|")[0])); return o; }
-    if (o.op !== "execute") return o;
-    const call = o.call === "last" ? calls : o.call;
-    const index = lists[call].indexOf(o.tool);
-    if (index < 0) throw new Error("tool " + o.tool + " not in getTools() call " + call);
-    return { op: "execute", call, index, input: o.input };
+// The names each getTools() call of `ops` returned, numbered as the oracle numbers calls: a
+// rejected call counts and returns none, and each getTools action of a `concurrent` counts.
+function toolLists(ops, res) {
+  const listed = (o) => o.startsWith("tools:") ? o.slice(6).split(";").filter(Boolean).map((t) => t.split("|")[0]) : [];
+  const lists = [];
+  ops.forEach((o, i) => {
+    if (o.op === "getTools") lists.push(listed(res[i]));
+    if (o.op === "concurrent") {
+      const alts = res[i].startsWith("any:") ? JSON.parse(res[i].slice(4)) : [res[i]];
+      const acts = alts.map((a) => JSON.parse(a.slice(4)));
+      o.actions.forEach((a, k) => {
+        if (a.act !== "getTools") return;
+        if (new Set(acts.map((x) => x[k])).size > 1) throw new Error("getTools action whose result depends on the order: " + JSON.stringify(o));
+        lists.push(listed(acts[0][k]));
+      });
+    }
   });
+  return lists;
+}
+function indexOf(lists, call, tool) {
+  const c = call === "last" ? lists.length - 1 : call;
+  const index = (lists[c] || []).indexOf(tool);
+  if (index < 0) throw new Error("tool " + tool + " not in getTools() call " + c);
+  return { call: c, index };
+}
+// Each op that names a tool is resolved against the oracle's run of the ops before it.
+function resolve(setup, trace) {
+  const outOps = [];
+  for (const o of [...setup, ...trace]) {
+    if (o.op === "execute") {
+      const lists = toolLists(outOps, runOracle(outOps));
+      const { doc, ...rest } = o;
+      outOps.push({ op: "execute", ...indexOf(lists, o.call, o.tool), input: o.input, ...(doc ? { doc } : {}) });
+    } else if (o.op === "concurrent" && o.actions.some((a) => a.act === "execute")) {
+      const lists = toolLists(outOps, runOracle(outOps));
+      outOps.push({ ...o, actions: o.actions.map((a) => a.act !== "execute" ? a
+        : { act: "execute", ...indexOf(lists, a.call, a.tool), input: a.input, signal: a.signal }) });
+    } else outOps.push(o);
+  }
   return { setup: outOps.slice(0, setup.length), trace: outOps.slice(setup.length) };
 }
 for (const c of cases) {
@@ -546,7 +959,7 @@ const doc = {
   spec: { repo: "https://github.com/webmachinelearning/webmcp", commit: "14b6d53" },
   format: {
     trace: "ops exactly as the oracle reads them; `setup` (if present) reproduces state left by earlier subtests in the same file and is run first, its outcomes unchecked",
-    checks: "`at` indexes the trace (not setup); `want` is what the WPT assertion requires: {outcome} exact oracle outcome string, {names} tool names in order, {count}, or {tool, field} with {equals}|{isNull}|{notNull}|{json}|{path, equals}",
+    checks: "`at` indexes the trace (not setup), and `action` the action of a `concurrent` op; `want` is what the WPT assertion requires: {outcome} exact oracle outcome string, {resolves} any result, {names} tool names in order, {count}, {lacks} no tool of that name, {tool, like} helpers.js toolsAreEqual() (origin is the model origin of the Tool's source document), or {tool, field} with {equals}|{isNull}|{notNull}|{json}|{path, equals}. Where the model allows several outcomes, a check agrees only if every one satisfies it",
     setup: "a check with `setup: true` is incidental (an awaited call the test needs to succeed) and does not by itself make a subtest count as expressible",
     proxy: "the model value substituted for a WPT value it cannot express, and why the substitution reaches the same spec steps",
     extra: "a second trace for the same subtest, when one tool cannot show two things at once",

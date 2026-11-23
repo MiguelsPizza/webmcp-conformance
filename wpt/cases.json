@@ -8,7 +8,7 @@
   "spec": {"repo":"https://github.com/webmachinelearning/webmcp","commit":"14b6d53"},
   "format": {
     "trace": "ops exactly as the oracle reads them; `setup` (if present) reproduces state left by earlier subtests in the same file and is run first, its outcomes unchecked",
-    "checks": "`at` indexes the trace (not setup); `want` is what the WPT assertion requires: {outcome} exact oracle outcome string, {names} tool names in order, {count}, or {tool, field} with {equals}|{isNull}|{notNull}|{json}|{path, equals}",
+    "checks": "`at` indexes the trace (not setup), and `action` the action of a `concurrent` op; `want` is what the WPT assertion requires: {outcome} exact oracle outcome string, {resolves} any result, {names} tool names in order, {count}, {lacks} no tool of that name, {tool, like} helpers.js toolsAreEqual() (origin is the model origin of the Tool's source document), or {tool, field} with {equals}|{isNull}|{notNull}|{json}|{path, equals}. Where the model allows several outcomes, a check agrees only if every one satisfies it",
     "setup": "a check with `setup: true` is incidental (an awaited call the test needs to succeed) and does not by itself make a subtest count as expressible",
     "proxy": "the model value substituted for a WPT value it cannot express, and why the substitution reaches the same spec steps",
     "extra": "a second trace for the same subtest, when one tool cannot show two things at once",
@@ -507,57 +507,109 @@
         {"at":2,"line":28,"assert":"executeTool(tool) resolves with 'success'","want":{"outcome":"result:hi"},"proxy":"the tool returns the string 'success' -> model `returnText` ('hi')","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}}
       ],
       "notExpressible": [
-        {"line":"29-30","assert":"options.signal is a non-aborted AbortSignal","why":"the execution signal is out of the model's scope"}
+        {"line":"29-30","assert":"options.signal is a non-aborted AbortSignal","why":"the callback's own options.signal is not modelled"}
       ]
     },
     {
       "file": "webmcp/imperative/executeTool-abort.https.html",
       "subtest": "caller abort propagates to tool callback options.signal",
       "lines": [33,122],
-      "scope": "out",
-      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"abort_propagate_tool","title":null,"description":"Test abort propagation","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0},
+        {"op":"getTools"},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"cancel","target":0}]},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":57,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"action":0,"line":119,"assert":"the execution rejects with 'custom cancellation reason'","want":{"outcome":"err:AbortError"},"proxy":"the execution signal is aborted with the reason 'custom cancellation reason' -> the model's signal, which aborts with the default reason (an AbortError DOMException); either way executeTool()'s abort steps \"Reject promise with signal's abort reason\" (index.bs L1146-L1148 at 14b6d53). WPT aborts after awaiting the callback's start; the model's `cancel` runs in the same script, before the queued tool execute steps. The abort steps reject the promise whenever they run, and cancelling doesn't stop a callback that has started, so the outcome is the same. execute returns a promise that never settles -> model `returnText`; the promise is rejected by the abort before the callback's outcome could matter"},
+        {"at":2,"action":1,"line":100,"assert":"controller.abort() (the cancel itself)","want":{"outcome":"ok"},"setup":true}
+      ],
+      "notExpressible": [
+        {"line":"93-98, 110-117","assert":"one toolactivated and one toolcancel event at document.modelContext","why":"events are not modelled"},
+        {"line":109,"assert":"order of tool start, toolactivated, rejection, signal abort, toolcancel","why":"events and the callback's own signal are not modelled"},
+        {"line":"120-121","assert":"the callback's options.signal aborts with an AbortError","why":"the callback's own options.signal is not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/executeTool-abort.https.html",
       "subtest": "executeTool() with already-aborted tool synchronously rejects",
       "lines": [124,145],
-      "scope": "out",
-      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"already_aborted_tool","title":null,"description":"Test already aborted signal","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0},
+        {"op":"getTools"},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"aborted"}]},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":128,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"action":0,"line":144,"assert":"executeTool(tool, {}, {signal: AbortSignal.abort('already aborted')}) rejects with 'already aborted'","want":{"outcome":"err:AbortError"},"proxy":"AbortSignal.abort('already aborted') -> an `aborted` execution signal, whose reason is the default AbortError; executeTool() returns a promise rejected with the signal's abort reason (index.bs L1140-L1141). The tool (t.unreached_func) -> `returnText`; it never runs either way"}
+      ],
+      "notExpressible": [
+        {"line":143,"assert":"the rejection is already observable after one microtask","why":"the oracle reports outcomes, not timing. The model rejects in executeTool()'s method steps (`syncAction`), which is what the timing checks"}
+      ]
     },
     {
       "file": "webmcp/imperative/executeTool-abort.https.html",
       "subtest": "executeTool() promise remains rejected even if tool callback resolves after abort",
       "lines": [147,180],
-      "scope": "out",
-      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"async_resolve_after_abort_tool","title":null,"description":"Test resolving promise after abort","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0},
+        {"op":"getTools"},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"cancel","target":0}]},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":153,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"action":0,"line":172,"assert":"executeTool() then controller.abort() in the same script: rejects AbortError even if the tool resolves","want":{"outcome":"err:AbortError"},"proxy":"the tool resolves 'late resolved value' once its options.signal aborts -> model `returnText`, which resolves; the cancelled call rejects whatever the callback does"}
+      ],
+      "notExpressible": [
+        {"line":"178-179","assert":"the callback's own promise resolves 'late resolved value'","why":"the callback's own options.signal is not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/executeTool-abort.https.html",
       "subtest": "concurrent executions of the same tool have independent AbortSignals",
       "lines": [182,233],
-      "scope": "out",
-      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"concurrent_tool","title":null,"description":"Test concurrent executions","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0},
+        {"op":"getTools"},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"cancel","target":0}]},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":193,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"action":0,"line":225,"assert":"c1.abort('cancel 1'): execPromise1 rejects with 'cancel 1'","want":{"outcome":"err:AbortError"},"proxy":"the execution signal is aborted with the reason 'cancel 1' -> the model's signal, which aborts with the default reason (an AbortError DOMException); either way executeTool()'s abort steps \"Reject promise with signal's abort reason\" (index.bs L1146-L1148 at 14b6d53). WPT aborts after awaiting the callback's start; the model's `cancel` runs in the same script, before the queued tool execute steps. The abort steps reject the promise whenever they run, and cancelling doesn't stop a callback that has started, so the outcome is the same"},
+        {"at":2,"action":1,"line":232,"assert":"execPromise2 resolves with 'exec2 result'","want":{"outcome":"result:hi"},"proxy":"the first execution never settles and the second resolves 'exec2 result' -> model `returnText` for both ('hi'); the first is cancelled, so only the second's result is seen; the WPT assertion is that the result is the returned string itself, so 'hi'","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}}
+      ],
+      "notExpressible": [
+        {"line":"228-229","assert":"execution 1's options.signal is aborted and execution 2's is not","why":"the callback's own options.signal is not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/executeTool-abort.https.html",
       "subtest": "tool synchronously self-cancelling via caller AbortSignal aborts options.signal and fires toolcancel",
       "lines": [235,259],
       "scope": "out",
-      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+      "reason": "a callback that aborts its caller's execution signal (the model's callbacks only settle or unregister their own tool), the callback's own options.signal, toolcancel"
     },
     {
       "file": "webmcp/imperative/executeTool-abort.https.html",
       "subtest": "tool asynchronously self-cancelling via caller AbortSignal aborts options.signal and fires toolcancel",
       "lines": [261,286],
       "scope": "out",
-      "reason": "execution signal / cancellation, toolactivated/toolcancel events"
+      "reason": "a callback that aborts its caller's execution signal (the model's callbacks only settle or unregister their own tool), the callback's own options.signal, toolcancel"
     },
     {
       "file": "webmcp/imperative/executeTool-across-trees.https.html",
       "subtest": "executeTool() rejects when the tool is hosted in another frame tree",
       "lines": [11,35],
       "scope": "out",
-      "reason": "multiple frame trees (window.open)"
+      "reason": "multiple frame trees (window.open): a document in another traversable"
     },
     {
       "file": "webmcp/imperative/executeTool-caller-navigate-abort.https.html",
@@ -757,22 +809,58 @@
       "file": "webmcp/imperative/executeTool-events.https.html",
       "subtest": "toolactivated and toolcancel events are dispatched on document.modelContext during tool execution and cancellation",
       "lines": [9,74],
-      "scope": "out",
-      "reason": "events (toolactivated/toolcancel), execution signal, iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"slow","title":null,"description":"slow tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0},
+        {"op":"getTools"},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"cancel","target":0}]},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":29,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"action":0,"line":54,"assert":"controller.abort(): executeTool() rejects AbortError","want":{"outcome":"err:AbortError"},"proxy":"WPT aborts after awaiting the callback's start; the model's `cancel` runs in the same script, before the queued tool execute steps. The abort steps reject the promise whenever they run, and cancelling doesn't stop a callback that has started, so the outcome is the same. execute returns a promise that never settles -> model `returnText`; the promise is rejected by the abort before the callback's outcome could matter"}
+      ],
+      "notExpressible": [
+        {"line":"41-52, 59-72","assert":"toolactivated and toolcancel events and their members","why":"events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/executeTool-events.https.html",
       "subtest": "toolactivated is dispatched at the ModelContext of the tool target document",
       "lines": [76,108],
-      "scope": "out",
-      "reason": "events (toolactivated/toolcancel), execution signal, iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"iframe_tool","title":null,"description":"Tool registered in a same-origin child document","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"doc":1},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":0,"line":84,"assert":"await iframeModelContext.registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":100,"assert":"iframe_tool is visible to the parent document","want":{"tool":"iframe_tool","field":"name","equals":"iframe_tool"}},
+        {"at":2,"line":102,"assert":"executeTool(tool, {}) resolves with 'iframe result'","want":{"outcome":"result:hi"},"proxy":"the tool returns the string 'iframe result' -> model `returnText` ('hi'); the WPT assertion is that the result is the returned string itself. {} serializes like the omitted input","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}}
+      ],
+      "notExpressible": [
+        {"line":"104-107","assert":"toolactivated fires at the target document's ModelContext, not the caller's","why":"events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/executeTool-events.https.html",
       "subtest": "toolcancel is dispatched at the ModelContext of the tool target document",
       "lines": [110,152],
-      "scope": "out",
-      "reason": "events (toolactivated/toolcancel), execution signal, iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"iframe_slow_tool","title":null,"description":"Slow tool registered in a same-origin child document","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"doc":1},
+        {"op":"getTools"},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"cancel","target":0}]}
+      ],
+      "checks": [
+        {"at":0,"line":118,"assert":"await iframeModelContext.registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":139,"assert":"iframe_slow_tool is visible to the parent document","want":{"tool":"iframe_slow_tool","field":"name","equals":"iframe_slow_tool"}},
+        {"at":2,"action":0,"line":143,"assert":"executeTool(tool, {}, {signal}) then controller.abort(): rejects AbortError","want":{"outcome":"err:AbortError"},"proxy":"execute returns a promise that never settles -> model `returnText`; the promise is rejected by the abort before the callback's outcome could matter"}
+      ],
+      "notExpressible": [
+        {"line":"148-151","assert":"toolcancel fires at the target document's ModelContext, not the caller's","why":"events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/executeTool-invalid-dictionary.https.html",
@@ -848,22 +936,46 @@
       "file": "webmcp/imperative/executeTool-signal-cross-origin.https.html",
       "subtest": "caller abort in parent document propagates to options.signal in cross-origin iframe tool",
       "lines": [15,73],
-      "scope": "out",
-      "reason": "execution signal, cross-origin iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"cross_origin_iframe_tool","title":null,"description":"Cross origin tool in iframe","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":9,"exposedTo":["origin:0"],"doc":3},
+        {"op":"getTools","fromOrigins":["origin:1"]},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"cancel","target":0}]}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"the iframe's await registerTool(tool, {exposedTo: [self.origin]}) fulfils (resources/iframe-register-tool.html)","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":44,"assert":"getTools({fromOrigins: [REMOTE]}) finds the tool","want":{"tool":"cross_origin_iframe_tool","field":"name","equals":"cross_origin_iframe_tool"},"setup":true},
+        {"at":2,"action":0,"line":68,"assert":"executeTool(tool, {}, {signal}) rejects with 'parent cross-origin abort reason' after controller.abort()","want":{"outcome":"err:AbortError"},"proxy":"the execution signal is aborted with the reason 'parent cross-origin abort reason' -> the model's signal, which aborts with the default reason (an AbortError DOMException); either way executeTool()'s abort steps \"Reject promise with signal's abort reason\" (index.bs L1146-L1148 at 14b6d53). WPT aborts after awaiting the callback's start; the model's `cancel` runs in the same script, before the queued tool execute steps. The abort steps reject the promise whenever they run, and cancelling doesn't stop a callback that has started, so the outcome is the same. The iframe tool hangs forever (hangsForeverAndReportsAbort) -> model `returnText`"}
+      ],
+      "notExpressible": [
+        {"line":"70-72","assert":"the iframe tool's options.signal aborts with an AbortError, and toolcancel fires in the iframe","why":"the callback's own options.signal and events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/executeTool-signal-cross-origin.https.html",
       "subtest": "caller abort in cross-origin iframe propagates to options.signal in parent document tool",
       "lines": [75,126],
       "scope": "out",
-      "reason": "execution signal, cross-origin iframes"
+      "reason": "asserts only on the callback's own options.signal and toolcancel, which are not modelled"
     },
     {
       "file": "webmcp/imperative/executeTool-signal-cross-origin.https.html",
       "subtest": "other frame aborting an AbortController passed to executeTool() cancels target execution and fires toolcancel",
       "lines": [128,194],
-      "scope": "out",
-      "reason": "execution signal, cross-origin iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"third_frame_cancel_tool","title":null,"description":"Cross origin tool cancelled by third frame signal","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":9,"exposedTo":["origin:0"],"doc":3},
+        {"op":"getTools","fromOrigins":["origin:1"]},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"cancel","target":0}]}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"the iframe's await registerTool(tool, {exposedTo: [self.origin]}) fulfils (resources/iframe-register-tool.html)","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":163,"assert":"getTools({fromOrigins: [REMOTE]}) finds the tool","want":{"tool":"third_frame_cancel_tool","field":"name","equals":"third_frame_cancel_tool"},"setup":true},
+        {"at":2,"action":0,"line":190,"assert":"executeTool(tool, {}, {signal}) rejects with 'aborted from third frame' after controller.abort()","want":{"outcome":"err:AbortError"},"proxy":"the execution signal is aborted with the reason 'aborted from third frame' -> the model's signal, which aborts with the default reason (an AbortError DOMException); either way executeTool()'s abort steps \"Reject promise with signal's abort reason\" (index.bs L1146-L1148 at 14b6d53). WPT aborts after awaiting the callback's start; the model's `cancel` runs in the same script, before the queued tool execute steps. The abort steps reject the promise whenever they run, and cancelling doesn't stop a callback that has started, so the outcome is the same. The iframe tool hangs forever (hangsForeverAndReportsAbort) -> model `returnText`. The AbortController comes from a third (same-origin) iframe's realm and the test page aborts it -> a signal of the caller's; the model has no realms, and executeTool()'s abort steps don't depend on the signal's realm"}
+      ],
+      "notExpressible": [
+        {"line":"192-193","assert":"the iframe tool's options.signal aborts with an AbortError, and toolcancel fires in the iframe","why":"the callback's own options.signal and events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/executeTool-target-detachment.https.html",
@@ -904,176 +1016,425 @@
       "file": "webmcp/imperative/executeTool-unregister-resolution-race.https.html",
       "subtest": "executeTool resolves successfully even when tool is unregistered synchronously after its promise resolves",
       "lines": [11,37],
-      "scope": "out",
-      "reason": "unregistration from inside a running callback (interleaving the model does not express)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"racy_tool","title":null,"description":"a racy tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"unregisterSelf","signal":0},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":14,"assert":"await registerTool(..., {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":36,"assert":"executeTool(tool) resolves with the JSON of the returned object","want":{"outcome":"result:{}"},"proxy":"the callback resolves {status:'resolved'} and then aborts its own registration signal -> `unregisterSelf`, which aborts first and then resolves with the received {}; both happen inside the callback, after \"invoke the execute callback\" started. WPT's '{\"status\":\"resolved\"}' becomes '{}' (JSON either way)"}
+      ],
+      "notes": "The trailing getTools() shows the tool did unregister itself (it is not a WPT assertion)."
     },
     {
       "file": "webmcp/imperative/exposedTo-cross-origin-child.https.html",
       "subtest": "Parent exposes tool to cross-origin child",
       "lines": [28,82],
-      "scope": "out",
-      "reason": "cross-origin iframes, exposedTo, toolchange events"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"parent_tool_exposed","title":null,"description":"Parent tool exposed to child","inputSchema":"object","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0,"exposedTo":["origin:1"]},
+        {"op":"getTools","fromOrigins":["origin:0"],"doc":3},
+        {"op":"getTools","fromOrigins":["origin:0"],"doc":3},
+        {"op":"execute","call":1,"index":0,"input":"omitted","doc":3},
+        {"op":"abort","signal":0},
+        {"op":"getTools","fromOrigins":["origin:0"],"doc":3}
+      ],
+      "checks": [
+        {"at":0,"line":30,"assert":"await registerTool(tool, {exposedTo: [REMOTE], signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":44,"assert":"the iframe's getTools({fromOrigins: [self.origin]}) returns the parent's tool, origin self.origin (toolsAreEqual)","want":{"tool":"parent_tool_exposed","like":{"name":"parent_tool_exposed","description":"Parent tool exposed to child","inputSchema":{"type":"object"},"outputSchema":null,"origin":0}},"proxy":"inputSchema {type:'object', properties:{query:...}} -> model `object` ({type:'object'})"},
+        {"at":3,"line":61,"assert":"the iframe's executeTool(tool) of the parent's tool fulfils","want":{"resolves":true}},
+        {"at":3,"line":62,"assert":"the iframe gets 'hello'","want":{"outcome":"result:hi"},"proxy":"the tool returns the string 'hello' -> model `returnText` ('hi'); the WPT assertion is that the result is the returned string itself, so 'hi'","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}},
+        {"at":5,"line":81,"assert":"after controller.abort(), the iframe's getTools() returns []","want":{"count":0}}
+      ],
+      "notes": "The iframe's 'execute' message runs getTools(options) and then executeTool(tool, {}); {} serializes like the omitted input.",
+      "notExpressible": [
+        {"line":76,"assert":"the cross-origin iframe receives toolchange on unregistration","why":"toolchange events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-cross-origin-child.https.html",
       "subtest": "Cross-origin child exposes tool to parent",
       "lines": [84,127],
-      "scope": "out",
-      "reason": "cross-origin iframes, exposedTo, toolchange events"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"iframe_tool_exposed","title":null,"description":"Iframe tool exposed to parent","inputSchema":"object","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":9,"exposedTo":["origin:0"],"doc":3},
+        {"op":"getTools","fromOrigins":["origin:1"]},
+        {"op":"execute","call":0,"index":0,"input":"omitted"},
+        {"op":"abort","signal":9},
+        {"op":"getTools","fromOrigins":["origin:1"]}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"the iframe's await registerTool(tool, {exposedTo: [parent], signal}) fulfils (resources/iframe-register-tool.html)","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":105,"assert":"getTools({fromOrigins: [REMOTE]}) includes the iframe's tool, origin REMOTE (toolsAreEqual)","want":{"tool":"iframe_tool_exposed","like":{"name":"iframe_tool_exposed","description":"Iframe tool exposed to parent","inputSchema":{"type":"object"},"outputSchema":null,"origin":1}},"proxy":"inputSchema {type:'object', properties:{query:...}} -> model `object`"},
+        {"at":2,"line":115,"assert":"executeTool(tool) resolves with 'hello from iframe'","want":{"outcome":"result:hi"},"proxy":"the iframe's tool returns 'hello from iframe' (resources/iframe-register-tool.html) -> model `returnText` ('hi')","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}},
+        {"at":4,"line":126,"assert":"after the iframe unregisters, getTools({fromOrigins: [REMOTE]}) returns []","want":{"count":0}}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-cross-origin-child.https.html",
       "subtest": "Parent exposes tool to origin that is neither its own nor its iframe's",
       "lines": [129,159],
-      "scope": "out",
-      "reason": "cross-origin iframes, exposedTo, toolchange events"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"parent_tool","title":null,"description":"Parent tool exposed","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0,"exposedTo":["origin:3"]},
+        {"op":"getTools","fromOrigins":["origin:0"],"doc":3},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":132,"assert":"await registerTool(tool, {exposedTo: [OTHER], signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":144,"assert":"the iframe's getTools({fromOrigins: [self.origin]}) returns []","want":{"count":0}}
+      ],
+      "notExpressible": [
+        {"line":158,"assert":"the iframe does not receive toolchange","why":"toolchange events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-cross-origin-child.https.html",
       "subtest": "Iframe exposes tool to origin that is neither its own nor its parent's",
       "lines": [161,194],
-      "scope": "out",
-      "reason": "cross-origin iframes, exposedTo, toolchange events"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"iframe_tool","title":null,"description":"Iframe tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":9,"exposedTo":["origin:3"],"doc":3},
+        {"op":"getTools","fromOrigins":["origin:1"]},
+        {"op":"getTools","fromOrigins":["origin:1"]}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"the iframe's await registerTool(tool, {exposedTo: [OTHER]}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":185,"assert":"getTools({fromOrigins: [REMOTE]}) returns []","want":{"count":0}},
+        {"at":2,"line":193,"assert":"after the 'unregister' message, getTools({fromOrigins: [REMOTE]}) still returns []","want":{"count":0}}
+      ],
+      "notes": "L187 asks the iframe to unregister 'iframe_tool_to_c', a name it never registered, so the iframe aborts nothing and iframe_tool stays registered; the trace has no abort. The assertion holds either way.",
+      "notExpressible": [
+        {"line":166,"assert":"the parent receives no toolchange event","why":"toolchange events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-cross-origin-child.https.html",
       "subtest": "Cross-origin iframe without permissions policy does not receive toolchange event even if exposed to it",
       "lines": [196,222],
       "scope": "out",
-      "reason": "cross-origin iframes, exposedTo, toolchange events"
+      "reason": "asserts only on toolchange events"
     },
     {
       "file": "webmcp/imperative/exposedTo-defaults-cross-origin.https.html",
       "subtest": "Parent tool with no exposedTo array is not visible to cross-origin iframe",
       "lines": [28,56],
-      "scope": "out",
-      "reason": "cross-origin iframes, exposedTo defaults"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"parent_tool_default","title":null,"description":"Parent tool with default exposure","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0},
+        {"op":"getTools","doc":3},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":30,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":41,"assert":"the cross-origin iframe's getTools() returns []","want":{"count":0}}
+      ],
+      "notExpressible": [
+        {"line":55,"assert":"the cross-origin iframe receives no toolchange on unregistration","why":"toolchange events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-defaults-cross-origin.https.html",
       "subtest": "Parent tool with empty exposedTo array is not visible to cross-origin iframe",
       "lines": [58,85],
-      "scope": "out",
-      "reason": "cross-origin iframes, exposedTo defaults"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"parent_tool_empty","title":null,"description":"Parent tool with empty exposedTo","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0,"exposedTo":[]},
+        {"op":"getTools","doc":3},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":60,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":70,"assert":"the cross-origin iframe's getTools() returns []","want":{"count":0}}
+      ],
+      "notExpressible": [
+        {"line":84,"assert":"the cross-origin iframe receives no toolchange on unregistration","why":"toolchange events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-defaults-cross-origin.https.html",
       "subtest": "Cross-origin iframe tool with default exposure is not visible to parent",
       "lines": [87,117],
-      "scope": "out",
-      "reason": "cross-origin iframes, exposedTo defaults"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"iframe_tool_default","title":null,"description":"Iframe tool with default exposure","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":9,"doc":3},
+        {"op":"getTools"},
+        {"op":"abort","signal":9},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"the iframe's await registerTool(...) fulfils (resources/iframe-register-tool.html)","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":110,"assert":"getTools() returns []","want":{"count":0}},
+        {"at":3,"line":116,"assert":"after the iframe unregisters, getTools() has no iframe_tool_default","want":{"lacks":"iframe_tool_default"}}
+      ],
+      "notExpressible": [
+        {"line":92,"assert":"the parent receives no toolchange event","why":"toolchange events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-defaults-cross-origin.https.html",
       "subtest": "Cross-origin iframe tool with empty exposedTo array is not visible to parent",
       "lines": [119,150],
-      "scope": "out",
-      "reason": "cross-origin iframes, exposedTo defaults"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"iframe_tool_empty","title":null,"description":"Iframe tool with empty exposedTo","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":9,"exposedTo":[],"doc":3},
+        {"op":"getTools"},
+        {"op":"abort","signal":9},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"the iframe's await registerTool(...) fulfils (resources/iframe-register-tool.html)","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":143,"assert":"getTools() returns []","want":{"count":0}},
+        {"at":3,"line":149,"assert":"after the iframe unregisters, getTools() has no iframe_tool_empty","want":{"lacks":"iframe_tool_empty"}}
+      ],
+      "notExpressible": [
+        {"line":124,"assert":"the parent receives no toolchange event","why":"toolchange events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-defaults-same-origin.https.html",
       "subtest": "Parent tool with missing `exposedTo` array is visible to same-origin iframe",
       "lines": [23,73],
-      "scope": "out",
-      "reason": "iframes (multi-document), exposedTo defaults"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"parent_tool_default","title":null,"description":"Parent tool with default exposure","inputSchema":"object","outputSchema":"absent","annotations":{"readOnlyHint":true,"untrustedContentHint":false,"consequentialHint":false,"debugging":false},"behavior":"returnText","signal":0},
+        {"op":"getTools","doc":1},
+        {"op":"getTools","doc":1},
+        {"op":"execute","call":1,"index":0,"input":"omitted","doc":1},
+        {"op":"abort","signal":0},
+        {"op":"getTools","doc":1}
+      ],
+      "checks": [
+        {"at":0,"line":25,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":40,"assert":"the same-origin iframe's getTools() returns the parent's tool","want":{"tool":"parent_tool_default","field":"name","equals":"parent_tool_default"}},
+        {"at":1,"line":41,"assert":"toolsAreEqual(tool, {...}), origin self.origin","want":{"tool":"parent_tool_default","like":{"name":"parent_tool_default","description":"Parent tool with default exposure","inputSchema":{"type":"object"},"outputSchema":null,"annotations":{"readOnlyHint":true,"untrustedContentHint":false,"consequentialHint":false,"debugging":false},"origin":0}},"proxy":"inputSchema {type:'object', properties:{query:...}} -> model `object`"},
+        {"at":3,"line":53,"assert":"the iframe's executeTool(tool) fulfils","want":{"resolves":true}},
+        {"at":3,"line":54,"assert":"the iframe gets 'hello'","want":{"outcome":"result:hi"},"proxy":"the tool returns the string 'hello' -> model `returnText` ('hi'); the WPT assertion is that the result is the returned string itself, so 'hi'","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}},
+        {"at":5,"line":72,"assert":"after controller.abort(), the iframe's getTools() returns []","want":{"count":0}}
+      ],
+      "notes": "The iframe's 'execute' message runs getTools() and then executeTool(tool, {}); {} serializes like the omitted input.",
+      "notExpressible": [
+        {"line":68,"assert":"the same-origin iframe receives toolchange on unregistration","why":"toolchange events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-defaults-same-origin.https.html",
       "subtest": "Parent tool with empty `exposedTo` array is visible to same-origin iframe",
       "lines": [75,122],
-      "scope": "out",
-      "reason": "iframes (multi-document), exposedTo defaults"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"parent_tool_empty","title":null,"description":"Parent tool with empty exposedTo","inputSchema":"object","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0,"exposedTo":[]},
+        {"op":"getTools","doc":1},
+        {"op":"getTools","doc":1},
+        {"op":"execute","call":1,"index":0,"input":"omitted","doc":1},
+        {"op":"abort","signal":0},
+        {"op":"getTools","doc":1}
+      ],
+      "checks": [
+        {"at":0,"line":77,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":90,"assert":"the same-origin iframe's getTools() returns the parent's tool","want":{"tool":"parent_tool_empty","field":"name","equals":"parent_tool_empty"}},
+        {"at":1,"line":91,"assert":"toolsAreEqual(tool, {...}), origin self.origin","want":{"tool":"parent_tool_empty","like":{"name":"parent_tool_empty","description":"Parent tool with empty exposedTo","inputSchema":{"type":"object"},"outputSchema":null,"origin":0}},"proxy":"inputSchema {type:'object', properties:{query:...}} -> model `object`"},
+        {"at":3,"line":102,"assert":"the iframe's executeTool(tool) fulfils","want":{"resolves":true}},
+        {"at":3,"line":103,"assert":"the iframe gets 'hello'","want":{"outcome":"result:hi"},"proxy":"the tool returns the string 'hello' -> model `returnText` ('hi'); the WPT assertion is that the result is the returned string itself, so 'hi'","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}},
+        {"at":5,"line":121,"assert":"after controller.abort(), the iframe's getTools() returns []","want":{"count":0}}
+      ],
+      "notes": "The iframe's 'execute' message runs getTools() and then executeTool(tool, {}); {} serializes like the omitted input.",
+      "notExpressible": [
+        {"line":117,"assert":"the same-origin iframe receives toolchange on unregistration","why":"toolchange events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-defaults-same-origin.https.html",
       "subtest": "Same-origin iframe tool with default exposure is visible to parent",
       "lines": [124,162],
-      "scope": "out",
-      "reason": "iframes (multi-document), exposedTo defaults"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"iframe_tool_default","title":null,"description":"Iframe tool with default exposure","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":3,"doc":1},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"},
+        {"op":"abort","signal":3},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"the iframe's await registerTool(...) fulfils (resources/iframe-register-tool.html)","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":141,"assert":"[tool] = getTools() is the iframe's tool, origin iframe.contentWindow.origin (toolsAreEqual)","want":{"tool":"iframe_tool_default","like":{"name":"iframe_tool_default","description":"Iframe tool with default exposure","inputSchema":null,"outputSchema":null,"origin":0}}},
+        {"at":2,"line":151,"assert":"executeTool(tool) resolves with 'hello from iframe'","want":{"outcome":"result:hi"},"proxy":"the iframe's tool returns 'hello from iframe' (resources/iframe-register-tool.html) -> model `returnText` ('hi')","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}},
+        {"at":4,"line":161,"assert":"after the iframe unregisters, getTools() has no iframe_tool_default","want":{"lacks":"iframe_tool_default"}}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-defaults-same-origin.https.html",
       "subtest": "Same-origin iframe tool with empty exposedTo array is visible to parent",
       "lines": [164,203],
-      "scope": "out",
-      "reason": "iframes (multi-document), exposedTo defaults"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"iframe_tool_empty","title":null,"description":"Iframe tool with empty exposedTo","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":3,"exposedTo":[],"doc":1},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"},
+        {"op":"abort","signal":3},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"the iframe's await registerTool(...) fulfils (resources/iframe-register-tool.html)","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":182,"assert":"[tool] = getTools() is the iframe's tool, origin iframe.contentWindow.origin (toolsAreEqual)","want":{"tool":"iframe_tool_empty","like":{"name":"iframe_tool_empty","description":"Iframe tool with empty exposedTo","inputSchema":null,"outputSchema":null,"origin":0}}},
+        {"at":2,"line":192,"assert":"executeTool(tool) resolves with 'hello from iframe'","want":{"outcome":"result:hi"},"proxy":"the iframe's tool returns 'hello from iframe' (resources/iframe-register-tool.html) -> model `returnText` ('hi')","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}},
+        {"at":4,"line":202,"assert":"after the iframe unregisters, getTools() has no iframe_tool_empty","want":{"lacks":"iframe_tool_empty"}}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like / in exposedTo",
       "lines": [26,44],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"test_tool_x","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["invalid"]}
+      ],
+      "checks": [
+        {"at":0,"line":36,"assert":"registerTool(tool, {exposedTo: [\"/\"]}) rejects SecurityError","want":{"outcome":"err:SecurityError"}}
+      ],
+      "notes": "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name."
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like * in exposedTo",
       "lines": [26,44],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"test_tool_x","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["invalid"]}
+      ],
+      "checks": [
+        {"at":0,"line":36,"assert":"registerTool(tool, {exposedTo: [\"*\"]}) rejects SecurityError","want":{"outcome":"err:SecurityError"}}
+      ],
+      "notes": "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name."
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like https://example:bogus in exposedTo",
       "lines": [26,44],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"test_tool_x","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["invalid"]}
+      ],
+      "checks": [
+        {"at":0,"line":36,"assert":"registerTool(tool, {exposedTo: [\"https://example:bogus\"]}) rejects SecurityError","want":{"outcome":"err:SecurityError"}}
+      ],
+      "notes": "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name."
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like https://\ud800.com in exposedTo",
       "lines": [26,44],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"test_tool_x","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["invalid"]}
+      ],
+      "checks": [
+        {"at":0,"line":36,"assert":"registerTool(tool, {exposedTo: [\"https://\\ud800.com\"]}) rejects SecurityError","want":{"outcome":"err:SecurityError"},"proxy":"'https://\\ud800.com' -> `invalid`: USVString conversion turns the lone surrogate into U+FFFD, which the host parser rejects"}
+      ],
+      "notes": "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name."
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like http://example.com in exposedTo",
       "lines": [26,44],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"test_tool_x","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["insecure"]}
+      ],
+      "checks": [
+        {"at":0,"line":36,"assert":"registerTool(tool, {exposedTo: [\"http://example.com\"]}) rejects SecurityError","want":{"outcome":"err:SecurityError"}}
+      ],
+      "notes": "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name."
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like ftp://example.com in exposedTo",
       "lines": [26,44],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"test_tool_x","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["insecure"]}
+      ],
+      "checks": [
+        {"at":0,"line":36,"assert":"registerTool(tool, {exposedTo: [\"ftp://example.com\"]}) rejects SecurityError","want":{"outcome":"err:SecurityError"},"proxy":"'ftp://example.com' -> `insecure`: it parses, but an ftp: URL's origin is opaque, so not potentially trustworthy"}
+      ],
+      "notes": "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name."
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like about:blank in exposedTo",
       "lines": [26,44],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"test_tool_x","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["insecure"]}
+      ],
+      "checks": [
+        {"at":0,"line":36,"assert":"registerTool(tool, {exposedTo: [\"about:blank\"]}) rejects SecurityError","want":{"outcome":"err:SecurityError"},"proxy":"'about:blank' -> `insecure`: it parses, but its origin is opaque, so not potentially trustworthy"}
+      ],
+      "notes": "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name."
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like about:srcdoc in exposedTo",
       "lines": [26,44],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"test_tool_x","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["insecure"]}
+      ],
+      "checks": [
+        {"at":0,"line":36,"assert":"registerTool(tool, {exposedTo: [\"about:srcdoc\"]}) rejects SecurityError","want":{"outcome":"err:SecurityError"},"proxy":"'about:srcdoc' -> `insecure`, as for about:blank"}
+      ],
+      "notes": "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name."
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like https://example.com in exposedTo",
       "lines": [26,44],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"test_tool_0.8","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["origin:3"]}
+      ],
+      "checks": [
+        {"at":0,"line":39,"assert":"await registerTool(tool, {exposedTo: [\"https://example.com\"]}) fulfils","want":{"outcome":"ok"},"proxy":"'https://example.com' -> origin 3, a potentially trustworthy origin no document has"}
+      ],
+      "notes": "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name."
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() throws SecurityError for invalid or non-potentially-trustworthy origins like http://localhost:3000 in exposedTo",
       "lines": [26,44],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"test_tool_0.8","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["origin:3"]}
+      ],
+      "setupNote": "the successful registrations of earlier iterations (never unregistered)",
+      "trace": [
+        {"op":"register","name":"test_tool_0.9","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["origin:3"]}
+      ],
+      "checks": [
+        {"at":0,"line":39,"assert":"await registerTool(tool, {exposedTo: [\"http://localhost:3000\"]}) fulfils","want":{"outcome":"ok"},"proxy":"'http://localhost:3000' -> origin 3: localhost is potentially trustworthy, and no document has that origin"}
+      ],
+      "notes": "The name is 'test_tool_' + Math.random(); the trace uses a fixed valid name."
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
       "subtest": "registerTool() with abort signal reason because signal is processed before `exposedTo`",
       "lines": [47,54],
-      "scope": "out",
-      "reason": "exposedTo origin validation (SecurityError)"
+      "scope": "in",
+      "setup": [
+        {"op":"register","name":"test_tool_0.8","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["origin:3"]},
+        {"op":"register","name":"test_tool_0.9","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["origin:3"]}
+      ],
+      "setupNote": "the successful registrations of the loop (never unregistered)",
+      "trace": [
+        {"op":"abort","signal":0},
+        {"op":"register","name":"name","title":null,"description":"description","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnUndefined","signal":0,"exposedTo":["insecure"]}
+      ],
+      "checks": [
+        {"at":1,"line":49,"assert":"registerTool with AbortSignal.abort('aborted') and exposedTo ['about:blank#invalidOrigin'] rejects with the abort reason, not SecurityError","want":{"outcome":"err:AbortError"},"proxy":"AbortSignal.abort('aborted') -> a signal the trace aborts first, whose reason is the default AbortError, so 'rejects with the abort reason' reads err:AbortError (SecurityError if exposedTo were checked first); 'about:blank#invalidOrigin' -> `insecure` (it parses; its origin is opaque)"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-invalid-origins.https.html",
@@ -1081,12 +1442,12 @@
       "lines": [56,95],
       "scope": "in",
       "setup": [
-        {"op":"register","name":"test_tool_0.25","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null},
-        {"op":"register","name":"test_tool_0.75","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null}
+        {"op":"register","name":"test_tool_0.8","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["origin:3"]},
+        {"op":"register","name":"test_tool_0.9","title":null,"description":"Test tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"exposedTo":["origin:3"]}
       ],
-      "setupNote": "the two successful registrations of earlier subtests ('test_tool_' + Math.random(), exposedTo a valid origin); exposedTo is dropped, which does not change what this document's getTools() returns",
+      "setupNote": "the successful registrations of the loop (never unregistered)",
       "trace": [
-        {"op":"register","name":"target_tool","title":null,"description":"","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":1},
+        {"op":"register","name":"target_tool","title":null,"description":"Target tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":1,"exposedTo":["insecure"]},
         {"op":"register","name":"target_tool","title":null,"description":"Target tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":2},
         {"op":"getTools"},
         {"op":"abort","signal":1},
@@ -1094,42 +1455,78 @@
         {"op":"execute","call":0,"index":0,"input":"omitted"}
       ],
       "checks": [
+        {"at":0,"line":65,"assert":"registerTool(target_tool, {signal: ac1, exposedTo: ['http://insecure.example']}) rejects SecurityError","want":{"outcome":"err:SecurityError"}},
         {"at":1,"line":69,"assert":"await registerTool(target_tool, {signal: ac2}) fulfils","want":{"outcome":"ok"},"setup":true},
         {"at":2,"line":77,"assert":"[tool] = getTools() is target_tool","want":{"tool":"target_tool","field":"description","equals":"Target tool"},"setup":true},
         {"at":4,"line":89,"assert":"after ac1.abort(), registering target_tool again rejects InvalidStateError","want":{"outcome":"err:InvalidStateError"}},
         {"at":5,"line":94,"assert":"executeTool(tool) resolves with 'callback2'","want":{"outcome":"result:hi"},"proxy":"the tool returns the string 'callback2' -> model `returnText` ('hi')","expectDisagree":{"kind":"spec-vs-wpt","ref":"#361","spec":"spec.bs 'invoke the execute callback', fulfilled branch: 'Let serializedResult be the result of serializing a JavaScript value to a JSON string given v' (14b6d53 L618-622)","summary":"WPT expects the tool's string result back unchanged; the spec JSON-serializes it, so a tool returning 'hi' gives '\"hi\"'"}}
-      ],
-      "notExpressible": [
-        {"line":65,"assert":"the first registration rejects SecurityError (exposedTo: ['http://insecure.example'])","why":"exposedTo is out of the model's scope. The trace makes the first registration (with signal ac1) fail on the empty-description step instead, which also returns before the abort steps are added, so aborting ac1 must not touch target_tool either way"}
       ]
     },
     {
       "file": "webmcp/imperative/exposedTo-multiple-children.https.html",
       "subtest": "Multi-origin setup with mixed exposure lists",
       "lines": [15,101],
-      "scope": "out",
-      "reason": "cross-origin iframes, exposedTo"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"tool_b_to_c","title":null,"description":"Tool B exposed to C","inputSchema":"object","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":9,"exposedTo":["origin:2"],"doc":3},
+        {"op":"getTools"},
+        {"op":"getTools","fromOrigins":["origin:1"],"doc":2},
+        {"op":"abort","signal":9},
+        {"op":"getTools","fromOrigins":["origin:1"],"doc":2}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"frame B's await registerTool(tool, {exposedTo: [C]}) fulfils (resources/iframe-register-tool.html)","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":62,"assert":"the parent's getTools() returns []","want":{"count":0}},
+        {"at":2,"line":69,"assert":"frame C's getTools({fromOrigins: [B]}) returns B's tool, origin B (toolsAreEqual)","want":{"tool":"tool_b_to_c","like":{"name":"tool_b_to_c","description":"Tool B exposed to C","inputSchema":{"type":"object"},"outputSchema":null,"origin":1}},"proxy":"frame C (a child of the test page) -> document 2, which is nested in the same-origin document 1; getTools() walks every navigable of the tree, so where C sits doesn't change what it sees. inputSchema {type:'object', properties:...} -> model `object`"},
+        {"at":4,"line":100,"assert":"after B unregisters, frame C's getTools({fromOrigins: [B]}) returns []","want":{"count":0}}
+      ],
+      "notExpressible": [
+        {"line":58,"assert":"frame C receives toolchange on registration","why":"toolchange events are not modelled"},
+        {"line":94,"assert":"the parent receives no toolchange on unregistration","why":"toolchange events are not modelled"},
+        {"line":95,"assert":"frame C receives toolchange on unregistration","why":"toolchange events are not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/exposedTo-window-open.https.html",
       "subtest": "Tools are scoped to a frame tree, and are not exposed across opener boundaries.",
       "lines": [15,53],
       "scope": "out",
-      "reason": "multiple frame trees (window.open), exposedTo"
+      "reason": "multiple frame trees (window.open): a document in another traversable"
     },
     {
       "file": "webmcp/imperative/getTools-filtering.https.html",
       "subtest": "getTools() correctly filters returned tools by fromOrigins origins while preserving same-origin tools",
       "lines": [28,96],
-      "scope": "out",
-      "reason": "cross-origin iframes, getTools({fromOrigins}) filtering and validation"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"parent_tool","title":null,"description":"Parent tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0},
+        {"op":"register","name":"iframe_tool_b","title":null,"description":"Tool from B exposed to parent","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":9,"exposedTo":["origin:0"],"doc":3},
+        {"op":"register","name":"iframe_tool_c","title":null,"description":"Tool from C exposed to parent","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":6,"exposedTo":["origin:0"],"doc":2},
+        {"op":"getTools"},
+        {"op":"getTools"},
+        {"op":"getTools","fromOrigins":["origin:1"]},
+        {"op":"getTools","fromOrigins":["origin:1","origin:2"]},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":31,"assert":"await registerTool(parent_tool, {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":80,"assert":"iframe B's await registerTool(tool, {exposedTo: [self.origin]}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":80,"assert":"iframe C's await registerTool(tool, {exposedTo: [self.origin]}) fulfils","want":{"outcome":"ok"},"setup":true,"proxy":"iframe C (a child of the test page) -> document 2, nested in the same-origin document 1; getTools() walks the whole tree"},
+        {"at":3,"line":73,"assert":"getTools() returns only parent_tool","want":{"names":["parent_tool"]}},
+        {"at":4,"line":78,"assert":"getTools({}) returns only parent_tool","want":{"names":["parent_tool"]},"proxy":"getTools({}) -> getTools() with no fromOrigins; an omitted fromOrigins is the same empty list"},
+        {"at":5,"line":83,"assert":"getTools({fromOrigins: [B]}) returns iframe_tool_b, parent_tool","want":{"names":["iframe_tool_b","parent_tool"]}},
+        {"at":6,"line":89,"assert":"getTools({fromOrigins: [B, C]}) returns iframe_tool_b, iframe_tool_c, parent_tool","want":{"names":["iframe_tool_b","iframe_tool_c","parent_tool"]}}
+      ]
     },
     {
       "file": "webmcp/imperative/getTools-filtering.https.html",
       "subtest": "getTools() rejects with SecurityError if an insecure origin is supplied in fromOrigins",
       "lines": [98,100],
-      "scope": "out",
-      "reason": "cross-origin iframes, getTools({fromOrigins}) filtering and validation"
+      "scope": "in",
+      "trace": [{"op":"getTools","fromOrigins":["insecure"]}],
+      "checks": [
+        {"at":0,"line":99,"assert":"getTools({fromOrigins: ['http://insecure.com']}) rejects SecurityError","want":{"outcome":"err:SecurityError"}}
+      ]
     },
     {
       "file": "webmcp/imperative/getTools-imperative-annotations.https.html",
@@ -1408,35 +1805,56 @@
       "subtest": "registerTool() rejects in iframe, after navigation to an origin not covered by permissions policy",
       "lines": [15,59],
       "scope": "out",
-      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+      "reason": "navigation of an iframe to an origin its allow attribute does not cover"
     },
     {
       "file": "webmcp/imperative/permissions-policy.https.html",
       "subtest": "getTools() throws NotAllowedError in iframe when permissions policy is disabled",
       "lines": [61,85],
-      "scope": "out",
-      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+      "scope": "in",
+      "trace": [{"op":"getTools","doc":4}],
+      "checks": [
+        {"at":0,"line":84,"assert":"the cross-origin iframe's (no allow) getTools() rejects NotAllowedError","want":{"outcome":"err:NotAllowedError"}}
+      ]
     },
     {
       "file": "webmcp/imperative/permissions-policy.https.html",
       "subtest": "executeTool() throws NotAllowedError in iframe when permissions policy is disabled",
       "lines": [87,118],
-      "scope": "out",
-      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"parent_tool","title":null,"description":"Parent tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"omitted","doc":4},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":93,"assert":"await registerTool(parent_tool, {signal}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":101,"assert":"parent_tool is discovered","want":{"tool":"parent_tool","field":"name","equals":"parent_tool"},"setup":true},
+        {"at":2,"line":113,"assert":"the iframe's executeTool(tool) rejects NotAllowedError","want":{"outcome":"err:NotAllowedError"},"proxy":"a same-origin <iframe allow=\"tools 'none'\"> -> document 4, a cross-origin <iframe> without allow=\"tools\". The model has no same-origin document that is not allowed to use \"tools\"; the check that rejects is only whether the document is allowed, not its origin"}
+      ]
     },
     {
       "file": "webmcp/imperative/permissions-policy.https.html",
       "subtest": "registerTool() throws NotAllowedError in iframe when permissions policy is disabled",
       "lines": [120,140],
-      "scope": "out",
-      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"child_tool","title":null,"description":"Child tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"doc":4}
+      ],
+      "checks": [
+        {"at":0,"line":131,"assert":"the iframe's registerTool() rejects NotAllowedError","want":{"outcome":"err:NotAllowedError"},"proxy":"a same-origin <iframe allow=\"tools 'none'\"> -> document 4, a cross-origin <iframe> without allow=\"tools\". The model has no same-origin document that is not allowed to use \"tools\"; the check that rejects is only whether the document is allowed, not its origin"}
+      ]
     },
     {
       "file": "webmcp/imperative/permissions-policy.https.html",
       "subtest": "getTools() throws NotAllowedError in same-origin iframe when permissions policy is disabled",
       "lines": [142,158],
-      "scope": "out",
-      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+      "scope": "in",
+      "trace": [{"op":"getTools","doc":4}],
+      "checks": [
+        {"at":0,"line":153,"assert":"the iframe's getTools() rejects NotAllowedError","want":{"outcome":"err:NotAllowedError"},"proxy":"a same-origin <iframe allow=\"tools 'none'\"> -> document 4, a cross-origin <iframe> without allow=\"tools\". The model has no same-origin document that is not allowed to use \"tools\"; the check that rejects is only whether the document is allowed, not its origin"}
+      ]
     },
     {
       "file": "webmcp/imperative/permissions-policy.https.html",
@@ -1456,8 +1874,23 @@
       "file": "webmcp/imperative/permissions-policy.https.html",
       "subtest": "executeTool() rejects when target frame revokes exposedTo permission after getTools()",
       "lines": [197,251],
-      "scope": "out",
-      "reason": "permissions policy (plus non-modelled resumeTool()/waitForToolsUntil()), cross-origin iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"revocable_tool","title":null,"description":"Origin B revocable tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":9,"exposedTo":["origin:0"],"doc":3},
+        {"op":"getTools","fromOrigins":["origin:1"]},
+        {"op":"abort","signal":9},
+        {"op":"register","name":"revocable_tool","title":null,"description":"Origin B private tool","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":10,"exposedTo":[],"doc":3},
+        {"op":"getTools","doc":3},
+        {"op":"execute","call":0,"index":0,"input":"omitted"}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"the iframe's await registerTool(tool, {exposedTo: [self.origin]}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":222,"assert":"getTools({fromOrigins: [B]}) finds revocable_tool","want":{"tool":"revocable_tool","field":"name","equals":"revocable_tool"}},
+        {"at":3,"line":80,"assert":"the iframe's re-registration with exposedTo [] fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":4,"line":243,"assert":"the iframe's getTools() returns one tool, revocable_tool","want":{"names":["revocable_tool"]}},
+        {"at":5,"line":248,"assert":"executeTool(the earlier Tool) rejects NotFoundError","want":{"outcome":"err:NotFoundError"}}
+      ],
+      "notes": "The earlier Tool's tool id was unregistered, so the spec rejects it as 'tool not found' before the exposure check (which would also reject, with NotFoundError, for the new tool)."
     },
     {
       "file": "webmcp/imperative/register-tool-input-schema-registers-same-name.https.html",
@@ -1746,10 +2179,11 @@
       "subtest": "register tool promise rejects with error when signal gets aborted",
       "lines": [24,30],
       "scope": "in",
-      "trace": [],
-      "checks": [],
-      "notExpressible": [
-        {"line":29,"assert":"promise rejects with exactly the Error passed to controller.abort(error)","why":"the model's signals abort only with the default reason (an AbortError DOMException); a custom abort reason is not in its value set"}
+      "trace": [
+        {"op":"registerAbortSync","name":"empty","title":null,"description":"empty","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":1}
+      ],
+      "checks": [
+        {"at":0,"line":29,"assert":"registerTool(tool, {signal}); controller.abort(error); promise rejects with exactly error","want":{"outcome":"err:AbortError"},"proxy":"controller.abort(new Error('abort error')) -> an abort with the default reason (an AbortError DOMException); either way the abort steps reject the promise with the signal's abort reason (index.bs L893-L898). This is the previous subtest's trace: the custom reason is the only difference, and the model doesn't have it"}
       ]
     },
     {
@@ -1757,10 +2191,12 @@
       "subtest": "register tool promise rejects when signal is already aborted",
       "lines": [32,36],
       "scope": "in",
-      "trace": [],
-      "checks": [],
-      "notExpressible": [
-        {"line":35,"assert":"promise rejects with exactly 'aborted' (AbortSignal.abort('aborted'))","why":"custom abort reason, as above; the model would say err:AbortError for an already-aborted default-reason signal"}
+      "trace": [
+        {"op":"abort","signal":2},
+        {"op":"register","name":"empty","title":null,"description":"empty","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"echo","signal":2}
+      ],
+      "checks": [
+        {"at":1,"line":35,"assert":"registerTool(tool, {signal: AbortSignal.abort('aborted')}) rejects with exactly 'aborted'","want":{"outcome":"err:AbortError"},"proxy":"AbortSignal.abort('aborted') -> a signal the trace aborts first, with the default reason; registerTool() rejects with the signal's abort reason (index.bs L866-L868)"}
       ]
     },
     {
@@ -1863,8 +2299,13 @@
       "file": "webmcp/imperative/same-origin-iframe-registerTool-regression.https.html",
       "subtest": "registerTool() does not reject in connected same-origin iframe navigated away of about:blank",
       "lines": [10,26],
-      "scope": "out",
-      "reason": "iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"connected_tool","title":null,"description":"Tool registered in connected frame","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":null,"doc":1}
+      ],
+      "checks": [
+        {"at":0,"line":21,"assert":"the same-origin iframe's await registerTool(...) fulfils","want":{"outcome":"ok"},"proxy":"the iframe's document, loaded after its initial about:blank -> document 1. The model has no navigation; the call is made in the loaded document, which is what the assertion needs"}
+      ]
     },
     {
       "file": "webmcp/imperative/tool-re-registration-race.https.html",
@@ -1896,29 +2337,68 @@
       "file": "webmcp/imperative/unregister-during-executeTool.https.html",
       "subtest": "Pending executeTool() Promise resolves successfully when the target cross-origin tool is unregistered mid-execution",
       "lines": [25,97],
-      "scope": "out",
-      "reason": "unregistration while an execution is pending (interleaving), execution signal, iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"endless_tool","title":null,"description":"Endless tool in iframe","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"unregisterSelf","signal":9,"exposedTo":["origin:0"],"doc":3},
+        {"op":"getTools","fromOrigins":["origin:1"]},
+        {"op":"execute","call":0,"index":0,"input":"omitted"},
+        {"op":"getTools","fromOrigins":["origin:1"]}
+      ],
+      "checks": [
+        {"at":0,"line":80,"assert":"the iframe's await registerTool(tool, {exposedTo: [self.origin]}) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":1,"line":63,"assert":"the tool is visible to the parent","want":{"tool":"endless_tool","field":"name","equals":"endless_tool"},"setup":true},
+        {"at":2,"line":96,"assert":"the pending execution resolves with the tool's result","want":{"outcome":"result:{}"},"proxy":"The iframe's message handler unregisters the tool while its callback is pending -> model `unregisterSelf`, whose callback aborts its own registration signal and then resolves with its input. Either way the unregistration comes after \"invoke the execute callback\" has started, which the spec's note says doesn't cancel the execution. The tool resolves 'delayed_result'; `unregisterSelf` resolves with the omitted input, so the result reads '{}'. This hides the #361 half of L96: WPT also expects the string 'delayed_result' back without JSON encoding"},
+        {"at":3,"line":90,"assert":"getTools({fromOrigins: [REMOTE]}) no longer returns the tool","want":{"count":0},"proxy":"WPT calls getTools() after the unregistration and before the execution settles; the trace calls it after, when the tool map is the same"}
+      ],
+      "notExpressible": [
+        {"line":74,"assert":"the tool's options.signal is not aborted by the unregistration","why":"the callback's own options.signal is not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/unregister-during-executeTool.https.html",
       "subtest": "Pending executeTool() Promise resolves successfully when target same-document tool is unregistered mid-execution",
       "lines": [99,134],
-      "scope": "out",
-      "reason": "unregistration while an execution is pending (interleaving), execution signal, iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"same_doc_unregister_tool","title":null,"description":"Test unregister during exec in same doc","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"unregisterSelf","signal":0},
+        {"op":"getTools"},
+        {"op":"execute","call":0,"index":0,"input":"omitted"},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":106,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"line":133,"assert":"the pending execution resolves with the tool's result","want":{"outcome":"result:{}"},"proxy":"The test's regController.abort() unregisters the tool while its callback is pending -> model `unregisterSelf`, whose callback aborts its own registration signal and then resolves with its input. Either way the unregistration comes after \"invoke the execute callback\" has started, which the spec's note says doesn't cancel the execution. The tool returns 'same_doc_result'; `unregisterSelf` resolves with the omitted input, so the result reads '{}'. This hides the #361 half of L133"},
+        {"at":3,"line":128,"assert":"getTools() no longer returns the tool","want":{"count":0},"proxy":"WPT calls getTools() before the execution settles; the trace calls it after, when the tool map is the same"}
+      ],
+      "notExpressible": [
+        {"line":110,"assert":"the tool's options.signal is not aborted by the unregistration","why":"the callback's own options.signal is not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/unregister-during-executeTool.https.html",
       "subtest": "executeTool() cancellation propagates to options.signal even when tool synchronously unregistered itself inside execute()",
       "lines": [136,165],
-      "scope": "out",
-      "reason": "unregistration while an execution is pending (interleaving), execution signal, iframes"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"sync_unregister_then_abort_tool","title":null,"description":"Synchronously unregisters itself during execute(), then gets cancelled","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"unregisterSelf","signal":0},
+        {"op":"getTools"},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"cancel","target":0}]},
+        {"op":"getTools"}
+      ],
+      "checks": [
+        {"at":0,"line":143,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"action":0,"line":163,"assert":"execController.abort('caller_cancelled') after the tool unregistered itself: rejects with 'caller_cancelled'","want":{"outcome":"err:AbortError"},"proxy":"the execution signal is aborted with the reason 'caller_cancelled' -> the model's signal, which aborts with the default reason (an AbortError DOMException); either way executeTool()'s abort steps \"Reject promise with signal's abort reason\" (index.bs L1146-L1148 at 14b6d53). WPT aborts after awaiting the callback's start; the model's `cancel` runs in the same script, before the queued tool execute steps. The abort steps reject the promise whenever they run, and cancelling doesn't stop a callback that has started, so the outcome is the same. The tool aborts regController and returns a promise that never settles -> `unregisterSelf`, which aborts its registration signal and then resolves; the cancelled call rejects either way"}
+      ],
+      "notExpressible": [
+        {"line":164,"assert":"the callback's options.signal aborts","why":"the callback's own options.signal is not modelled"}
+      ]
     },
     {
       "file": "webmcp/imperative/unregister-during-executeTool.https.html",
       "subtest": "unregistering both outer and inner imperative tools during re-entrant executeTool() allows in-flight executions to settle",
       "lines": [167,215],
       "scope": "out",
-      "reason": "unregistration while an execution is pending (interleaving), execution signal, iframes"
+      "reason": "re-entrant executeTool() from inside a callback (the model's callbacks only settle or unregister their own tool)"
     },
     {
       "file": "webmcp/imperative/wait-for-tools-until-detach-crash.https.html",
@@ -2008,8 +2488,22 @@
       "file": "webmcp/tool-cancel-event.https.html",
       "subtest": "ontoolcancel is invoked when a tool invocation is canceled",
       "lines": [49,104],
-      "scope": "out",
-      "reason": "events (ToolCancelEvent, ontoolcancel)"
+      "scope": "in",
+      "trace": [
+        {"op":"register","name":"onevent_tool","title":null,"description":"Tool used to trigger ontoolcancel","inputSchema":"absent","outputSchema":"absent","annotations":null,"behavior":"returnText","signal":0},
+        {"op":"getTools"},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"cancel","target":0}]},
+        {"op":"concurrent","actions":[{"act":"execute","call":0,"index":0,"input":"omitted","signal":"live"},{"act":"cancel","target":0}]},
+        {"op":"abort","signal":0}
+      ],
+      "checks": [
+        {"at":0,"line":62,"assert":"await registerTool(...) fulfils","want":{"outcome":"ok"},"setup":true},
+        {"at":2,"action":0,"line":84,"assert":"first executeTool() then controller.abort(): rejects AbortError","want":{"outcome":"err:AbortError"},"proxy":"execute returns a promise that never settles -> model `returnText`; the promise is rejected by the abort before the callback's outcome could matter"},
+        {"at":3,"action":0,"line":84,"assert":"second executeTool() then controller.abort(): rejects AbortError","want":{"outcome":"err:AbortError"},"proxy":"execute returns a promise that never settles -> model `returnText`; the promise is rejected by the abort before the callback's outcome could matter"}
+      ],
+      "notExpressible": [
+        {"line":"50, 57, 92-94, 97, 102","assert":"ontoolcancel reflects the handler and is invoked exactly once","why":"events are not modelled"}
+      ]
     }
   ]
 }

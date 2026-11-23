@@ -16,7 +16,7 @@ The approach follows [Cedar](https://github.com/cedar-policy/cedar-spec): a smal
 | [`WebMCP/Oracle.lean`](WebMCP/Oracle.lean), [`Main.lean`](Main.lean) | The oracle: JSON traces in, the spec's outcomes out. `Oracle.lean` has the wire format, `Main.lean` the loop over stdin. |
 | [`harness/run.cjs`](harness/run.cjs) | Generates traces, runs them in a browser, compares, shrinks. |
 | [`corpus/`](corpus) | 1,000 recorded traces with expected outcomes, for running without Lean. |
-| [`wpt/`](wpt/README.md), [`tools/wpt-score.cjs`](tools/wpt-score.cjs) | The model scored against the official web-platform-tests for WebMCP: each in-scope subtest translated to a trace. |
+| [`wpt/`](wpt/README.md), [`tools/wpt-score.cjs`](tools/wpt-score.cjs) | The model scored against the official web-platform-tests for WebMCP, across frames, origins and cancellation: 89 of 211 subtests translated to traces, and every assertion the model can express agrees except the 13 that turn on spec issue #361. |
 | [`expectations/`](expectations) | Known divergences per target family (#361, version lag, and polyfill bugs and a possible spec issue found with frames and calls in flight), counted instead of failing. |
 | [`results/`](results) | Machine-written results of each run: versions, counts, and the trace for each unexpected divergence. |
 | [`repros/`](repros) | One minimal trace per finding in RESULTS.md, with what each implementation does. |
