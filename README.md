@@ -21,15 +21,9 @@ Each implementation replayed the same 1,000 recorded sequences (6,146 calls). [R
 
 I also scored the model against the official web-platform-tests. 89 of WPT's 211 subtests test things the model covers. The model agrees with them everywhere except 13 assertions that hinge on #361. A few assertions use values the model can't express; [wpt/README.md](wpt/README.md) lists them. Where WPT and the spec disagree, the model follows the spec.
 
-## What to trust
+## Caveats
 
-The model is my hand transcription of the spec, and nobody else has reviewed it yet. Every proof is about the model, so if I misread the spec, the theorems prove the wrong thing. If you know the spec, a check of [`Model.lean`](WebMCP/Model.lean) against the prose would help a lot. Each definition cites the algorithm it transcribes, [docs/spec-mapping.md](docs/spec-mapping.md) maps each spec section to its Lean, and [docs/reading-lean.md](docs/reading-lean.md) covers enough Lean to follow along. [`tools/check-spec.cjs`](tools/check-spec.cjs) flags when the cited spec text changes upstream ([`spec/anchors.json`](spec/anchors.json)). It can't catch a misreading.
-
-The proofs are checked by Lean 4.36.0 with no other dependencies. The build fails on any warning, so there's no `sorry`, and CI checks that every theorem named below uses only Lean's standard axioms (`propext`, `Classical.choice`, `Quot.sound`). The proofs are about a simplified model, with one fixed frame tree and author-supplied values from small fixed sets (see [Scope](#scope)), and say nothing outside it.
-
-The oracle's JSON parsing ([`Oracle.lean`](WebMCP/Oracle.lean), [`Main.lean`](Main.lean)), the harness ([`harness/run.cjs`](harness/run.cjs)) and the WPT translation are ordinary code with no proofs.
-
-Testing only shows that an implementation matched the model on the sequences we ran, not that it's correct. Each mismatch needs a person to decide whether the implementation, the spec or the model is wrong. When every implementation disagrees with the model in the same way, I'd look at the model and the spec first.
+The model is my reading of the spec, and nobody else has checked it yet, so the proofs are only as good as that reading. If you know the spec, comparing [`Model.lean`](WebMCP/Model.lean) with the prose would help a lot ([docs/spec-mapping.md](docs/spec-mapping.md) maps each section to its Lean). Passing the tests means an implementation matched the model, not that it's correct.
 
 ## Testing your implementation
 
