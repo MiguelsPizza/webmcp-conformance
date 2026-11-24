@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "comment": {
     "shows": "A tool resolving with the string \"hi\" gives executeTool() its JSON serialization, \"hi\" with quotes.",
     "spec": [

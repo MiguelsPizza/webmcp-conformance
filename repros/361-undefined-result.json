@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "comment": {
     "shows": "A tool resolving with undefined makes executeTool() reject with OperationError: undefined has no JSON serialization.",
     "spec": [

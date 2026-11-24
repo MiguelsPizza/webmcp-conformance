@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "comment": {
     "shows": "A tool whose callback rejects makes executeTool() reject with OperationError.",
     "spec": [

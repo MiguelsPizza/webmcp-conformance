@@ -31,7 +31,7 @@ You don't need Lean. The corpus records the model's expected outcome for every c
 
 ```
 npm install && npx playwright install chromium
-node harness/run.cjs chromium --replay corpus/spec-14b6d53.json
+node harness/run.cjs chromium --replay corpus/spec-47e2b99.json
 ```
 
 The first argument is the target:
@@ -59,7 +59,7 @@ Firefox and WebKit have no target yet. Playwright can drive Firefox, but the har
 
 ## Main results
 
-The proofs are in [`WebMCP/Proofs.lean`](WebMCP/Proofs.lean), about the model at spec commit [`14b6d53`](spec/anchors.json). A state is reachable if some sequence of calls gets there from an empty page, in any order the spec allows. A tool is exposed to an origin if it's that origin's own tool or lists the origin in `exposedTo`. A document is allowed to use tools if the "tools" permissions policy lets it. Proved about the model:
+The proofs are in [`WebMCP/Proofs.lean`](WebMCP/Proofs.lean), about the model at spec commit [`47e2b99`](spec/anchors.json). A state is reachable if some sequence of calls gets there from an empty page, in any order the spec allows. A tool is exposed to an origin if it's that origin's own tool or lists the origin in `exposedTo`. A document is allowed to use tools if the "tools" permissions policy lets it. Proved about the model:
 
 - In every reachable state, tool names are unique within a document, every registered tool is valid and lives in a document allowed to use tools, and every `Tool` object's name, `source` and `origin` match the registration it points to.
 - `getTools()` only returns tools exposed to the caller's origin, from documents allowed to use tools that are same origin with the caller or listed in `fromOrigins`.

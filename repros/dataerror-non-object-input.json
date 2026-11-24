@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "comment": {
     "shows": "Input whose JSON serialization is not an object (here an object whose toJSON() returns 5) makes executeTool() reject with DataError.",
     "spec": [

@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "comment": {
     "shows": "A Tool taken from getTools() whose registration was aborted must not run the tool that later reuses its name.",
     "spec": [

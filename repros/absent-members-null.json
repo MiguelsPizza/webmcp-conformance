@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "comment": {
     "shows": "A Tool exposes an absent inputSchema, outputSchema and annotations as null, not undefined.",
     "spec": [
