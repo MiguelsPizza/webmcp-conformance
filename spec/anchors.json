@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "anchors": [
     {
       "anchor": "tool-definition",
@@ -74,7 +74,7 @@
     {
       "anchor": "permissions-policy",
       "marker": "<h3 id=\"permissions-policy\">",
-      "sha256": "d99ffbb901341110"
+      "sha256": "1e9005784661906c"
     }
   ]
 }

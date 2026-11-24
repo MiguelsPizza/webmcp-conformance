@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "comment": {
     "shows": "registerTool() rejects with TypeError when outputSchema can't be serialized to JSON, as it does for inputSchema.",
     "spec": [

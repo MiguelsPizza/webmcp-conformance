@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "comment": {
     "shows": "Aborting executeTool()'s signal right after the call rejects its promise with AbortError, but the queued tool execute steps still run the callback. This callback unregisters its own tool, so the last getTools() is empty. Possibly the spec doesn't mean the callback to run.",
     "spec": [

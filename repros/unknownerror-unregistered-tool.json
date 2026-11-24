@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "comment": {
     "shows": "Executing a Tool whose registration was aborted rejects with NotFoundError.",
     "spec": [

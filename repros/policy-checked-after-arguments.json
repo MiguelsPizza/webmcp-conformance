@@ -1,5 +1,5 @@
 {
-  "spec": "14b6d53",
+  "spec": "47e2b99",
   "comment": {
     "shows": "In a document whose iframe doesn't delegate the \"tools\" feature, registerTool() rejects with NotAllowedError, even when an argument is also invalid: the policy check comes right after Web IDL conversion. Here the name has a space; also seen with unserializable schemas (TypeError), bad exposedTo (SecurityError) and aborted signals (AbortError).",
     "spec": [
